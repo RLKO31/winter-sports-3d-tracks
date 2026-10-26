@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Winter Sports Race Tracks | FIS Ski Alpin & IBU Biathlon</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Import Map for Three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Loading Screen -->
+  <div id="loader-overlay">
+    <div class="loader-box">
+      <div class="loader-spinner"></div>
+      <h2 id="loader-title">Lade 3D-Geländedaten...</h2>
+      <p id="loader-status">Verarbeite hochauflösendes DGM1 Relief (Open Data Bayern)</p>
+      <div class="loader-progress">
+        <div id="loader-progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header Overlay -->
+  <header class="app-header glass-panel">
+    <div class="brand">
+      <div class="brand-icon">
+        <i class="fa-solid fa-mountain"></i>
+      </div>
+      <div>
+        <h1>Winter Sports 3D Tracks</h1>
+        <p class="subtitle">Interaktive 3D-Geländemodelle & Streckenprofile (Saison 2026/27)</p>
+      </div>
+    </div>
+
+    <!-- Venue Switcher Pills -->
+    <div class="venue-switcher">
+      <button class="venue-btn active" data-venue="garmisch">
+        <span class="badge alpine">Ski Alpin</span>
+        <span class="venue-name">Garmisch (Kandahar)</span>
+      </button>
+      <button class="venue-btn" data-venue="ruhpolding">
+        <span class="badge biathlon">Biathlon</span>
+        <span class="venue-name">Ruhpolding (Chiemgau Arena)</span>
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <button id="btn-theme-toggle" class="icon-btn" title="Light/Dark Mode umschalten">
+        <i class="fa-solid fa-circle-half-stroke"></i>
+      </button>
+      <button id="btn-open-legal" class="icon-btn" title="Impressum & Open Data Credits">
+        <i class="fa-solid fa-scale-balanced"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Sidebar Controls -->
+  <aside class="sidebar glass-panel">
+    <!-- Active Venue & Track Card -->
+    <div class="panel-section">
+      <div class="track-header">
+        <span id="track-sport-badge" class="badge alpine">Ski Alpin</span>
+        <h2 id="track-title">Kandahar (Herren-Abfahrt)</h2>
+        <p id="track-venue-location" class="venue-sub">Garmisch-Partenkirchen, Deutschland</p>
+      </div>
+
+      <!-- Key Metrics Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-label">Länge</span>
+          <span id="stat-length" class="stat-val">3.330 m</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Höhendifferenz</span>
+          <span id="stat-drop" class="stat-val">920 m</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Start / Ziel</span>
+          <span id="stat-elev" class="stat-val">1.690 / 770 m</span>
+        </div>
+        <div class="stat-card highlight">
+          <span id="stat-special-label" class="stat-label">Max. Gefälle</span>
+          <span id="stat-special-val" class="stat-val">92 % (Freier Fall)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3D Visualization Modes -->
+    <div class="panel-section">
+      <h3 class="panel-title"><i class="fa-solid fa-layer-group"></i> 3D-Darstellung</h3>
+      
+      <div class="style-selector">
+        <button class="style-btn active" data-style="winter">
+          <i class="fa-solid fa-snowflake"></i> Schnee & Relief
+        </button>
+        <button class="style-btn" data-style="topo">
+          <i class="fa-solid fa-mountain"></i> Höhenstufen
+        </button>
+        <button class="style-btn" data-style="clay">
+          <i class="fa-solid fa-cube"></i> Studio Clay
+        </button>
+      </div>
+
+      <div class="toggle-group">
+        <label class="toggle-control">
+          <input type="checkbox" id="toggle-track" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-label"><i class="fa-solid fa-route"></i> Rennstrecke (3D-Band)</span>
+        </label>
+        <label class="toggle-control">
+          <input type="checkbox" id="toggle-milestones" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-label"><i class="fa-solid fa-flag"></i> Schlüsselstellen & Marken</span>
+        </label>
+        <label class="toggle-control">
+          <input type="checkbox" id="toggle-pulse" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-label"><i class="fa-solid fa-person-skiing"></i> Rennläufer-Simulation</span>
+        </label>
+        <label class="toggle-control">
+          <input type="checkbox" id="toggle-wireframe">
+          <span class="toggle-track"></span>
+          <span class="toggle-label"><i class="fa-solid fa-draw-polygon"></i> 3D-Drahtgitter (TIN)</span>
+        </label>
+        <label class="toggle-control">
+          <input type="checkbox" id="toggle-rotate">
+          <span class="toggle-track"></span>
+          <span class="toggle-label"><i class="fa-solid fa-rotate"></i> Sanfte Rotation</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Camera Presets -->
+    <div class="panel-section">
+      <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven</h3>
+      <div class="cam-presets-grid" id="cam-presets-container">
+        <!-- Dynamically injected based on selected track -->
+      </div>
+    </div>
+
+    <!-- Key Sections / Milestones list -->
+    <div class="panel-section">
+      <h3 class="panel-title"><i class="fa-solid fa-map-pin"></i> Schlüsselpassagen</h3>
+      <div id="milestones-list" class="milestones-container">
+        <!-- Populated via JavaScript -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Interactive Elevation Profile HUD -->
+  <div class="elevation-hud glass-panel">
+    <div class="hud-header">
+      <div class="hud-title">
+        <i class="fa-solid fa-chart-area"></i>
+        <span>Höhenprofil entlang der Strecke</span>
+      </div>
+      <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil für Streckendetails</div>
+    </div>
+    <div class="profile-canvas-wrapper">
+      <canvas id="elevation-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Milestone Info Modal -->
+  <div id="milestone-tooltip" class="milestone-card glass-panel">
+    <div class="tooltip-header">
+      <h4 id="tooltip-title">Passage</h4>
+      <span id="tooltip-elev" class="badge">0 m</span>
+    </div>
+    <p id="tooltip-desc">Beschreibung</p>
+  </div>
+
+  <!-- Legal & Open Data Modal -->
+  <div id="legal-modal" class="modal-overlay">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-scale-balanced"></i> Impressum & Datenquellen</h2>
+        <button id="btn-close-modal" class="close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal-content">
+        <section class="legal-section">
+          <h3>1. Angaben gemäß § 5 DDG & § 18 Abs. 2 MStV</h3>
+          <p>
+            <strong>Entwickler & Betreiber:</strong><br>
+            Ralf Oppel<br>
+            Studiengang Geodatenmanagement / Vermessung<br>
+            Hochschule für angewandte Wissenschaften Würzburg-Schweinfurt (THWS)<br>
+            E-Mail: <a href="mailto:ralf.oppel@study.thws.de">ralf.oppel@study.thws.de</a>
+          </p>
+          <p>
+            <em>Hinweis:</em> Es handelt sich um ein studentisches Forschungs- und Portfolio-Projekt zur 3D-Visualisierung alpiner Geodaten im Wintersport.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h3>2. Geobasisdaten & Quellennachweise (Open Data Bayern)</h3>
+          <p>
+            Die 3D-Geländereliefs basieren auf den amtlichen Geländemodellen des Freistaates Bayern:
+          </p>
+          <blockquote>
+            <strong>Bayerische Vermessungsverwaltung (LDBV)</strong><br>
+            Digitales Geländemodell 1m (DGM1) der Kacheln Garmisch-Partenkirchen und Ruhpolding.<br>
+            Lizenz: <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">Creative Commons Namensnennung (CC BY 4.0)</a><br>
+            Quelle: <em>Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</em>
+          </blockquote>
+        </section>
+
+        <section class="legal-section">
+          <h3>3. Streckendaten & Open-Source-Quellen</h3>
+          <ul>
+            <li><strong>Streckenführung & Geometrien:</strong> Synthetisiert aus OpenStreetMap / OpenSnowMap-Relationen sowie offiziellen FIS- und IBU-Homologationsdaten.</li>
+            <li><strong>3D-Technologie:</strong> Three.js (WebGL Engine, MIT License), OrbitControls.</li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-modal-ack" class="btn btn-primary">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Entry Point -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

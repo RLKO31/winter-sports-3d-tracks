@@ -1,0 +1,4 @@
+data/dgm_ruhpolding/
+data/dgm_garmisch/
+*.pyc
+__pycache__/
