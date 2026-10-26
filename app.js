@@ -5,7 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const state = {
   currentVenue: 'garmisch', // 'garmisch' or 'ruhpolding'
   styleMode: 'winter',      // 'winter', 'topo', 'clay'
-  showTrack: true,
+  showTrackRibbon: true,
+  showGradientColors: true,
   showMilestones: true,
   showSimulation: true,
   showWireframe: false,
@@ -24,7 +25,7 @@ let skierMarker = null;
 let currentTerrainData = null;
 let currentTrackData = null;
 
-// Scale factors: 1 unit in Three.js = 10 meters
+// Scale factors
 const SCALE = 0.08;
 const Z_SCALE = 0.08;
 
@@ -58,9 +59,9 @@ async function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.maxPolarAngle = Math.PI / 2 - 0.03; // Don't go below ground
-  controls.minDistance = 20;
-  controls.maxDistance = 600;
+  controls.maxPolarAngle = Math.PI / 2 - 0.03;
+  controls.minDistance = 15;
+  controls.maxDistance = 650;
   controls.autoRotate = state.autoRotate;
   controls.autoRotateSpeed = 0.6;
 
@@ -91,7 +92,6 @@ function setupLighting() {
   hemiLight.position.set(0, 300, 0);
   scene.add(hemiLight);
 
-  // Sunlight (Directional with soft shadows)
   sunLight = new THREE.DirectionalLight(0xfff7ed, 1.35);
   sunLight.position.set(180, 260, 150);
   sunLight.castShadow = true;
@@ -110,9 +110,8 @@ function setupLighting() {
 // --- VENUE SWITCHING & DATA LOADING ---
 async function switchVenue(venueKey) {
   state.currentVenue = venueKey;
-  updateLoader(true, `Lade ${venueKey === 'garmisch' ? 'Garmisch Kandahar' : 'Ruhpolding Chiemgau Arena'}...`, 30);
+  updateLoader(true, `Lade ${venueKey === 'garmisch' ? 'Garmisch Kandahar (HD)' : 'Ruhpolding Chiemgau Arena (HD)'}...`, 30);
 
-  // Clear previous venue objects
   if (terrainMesh) scene.remove(terrainMesh);
   if (terrainWireframe) scene.remove(terrainWireframe);
   while (trackGroup.children.length > 0) trackGroup.remove(trackGroup.children[0]);
@@ -131,10 +130,10 @@ async function switchVenue(venueKey) {
     currentTerrainData = resTerrain;
     currentTrackData = resTrack;
 
-    updateLoader(true, 'Erzeuge 3D-Geländerelief & Rennstrecken-Geometrie...', 70);
+    updateLoader(true, 'Rendere HD-Streckenkurven & 3D-Pistenband...', 70);
 
     buildTerrainMesh();
-    buildTrackMesh();
+    buildDetailedTrackRibbon();
     buildMilestones();
     updateUIForVenue();
     drawElevationProfile();
@@ -157,11 +156,10 @@ function buildTerrainMesh() {
   const worldHeight = height * SCALE;
 
   terrainGeometry = new THREE.PlaneGeometry(worldWidth, worldHeight, nx - 1, ny - 1);
-  terrainGeometry.rotateX(-Math.PI / 2); // Lay flat on XZ plane
+  terrainGeometry.rotateX(-Math.PI / 2);
 
   const posAttr = terrainGeometry.attributes.position;
   const colors = [];
-
   const baseZ = minZ;
 
   for (let i = 0; i < posAttr.count; i++) {
@@ -169,7 +167,6 @@ function buildTerrainMesh() {
     const yVal = (elev - baseZ) * Z_SCALE;
     posAttr.setY(i, yVal);
 
-    // Compute color based on style
     const c = getTerrainColor(elev, minZ, maxZ);
     colors.push(c.r, c.g, c.b);
   }
@@ -203,22 +200,19 @@ function buildTerrainMesh() {
   scene.add(terrainWireframe);
 }
 
-// Terrain Color Function
 function getTerrainColor(elev, minZ, maxZ) {
   const t = THREE.MathUtils.clamp((elev - minZ) / (maxZ - minZ), 0, 1);
   const c = new THREE.Color();
 
   if (state.styleMode === 'winter') {
-    // Winter Alpine Palette: Talgrün / Waldbraun -> Frischer Pulverschnee & Firn
     if (t < 0.25) {
-      c.setRGB(0.55 + t * 0.4, 0.62 + t * 0.35, 0.65 + t * 0.32); // Lower elevation snow/rock mix
+      c.setRGB(0.55 + t * 0.4, 0.62 + t * 0.35, 0.65 + t * 0.32);
     } else if (t < 0.65) {
-      c.setRGB(0.85 + (t - 0.25) * 0.3, 0.9 + (t - 0.25) * 0.25, 0.95); // Deep winter snowpack
+      c.setRGB(0.85 + (t - 0.25) * 0.3, 0.9 + (t - 0.25) * 0.25, 0.95);
     } else {
-      c.setRGB(0.96, 0.98, 1.0); // Pure glacial/summit alpine snow
+      c.setRGB(0.96, 0.98, 1.0);
     }
   } else if (state.styleMode === 'topo') {
-    // Hypsometric tint (Emerald -> Amber -> Ochre -> Snow)
     if (t < 0.33) c.setRGB(0.1 + t * 1.2, 0.65, 0.3);
     else if (t < 0.66) c.setRGB(0.9, 0.65 + (t - 0.33) * 0.5, 0.2);
     else c.setRGB(0.85 + (t - 0.66) * 0.4, 0.35, 0.25);
@@ -256,62 +250,137 @@ function worldToLocal(x, y, z) {
   const centerY = originY + height / 2;
 
   const lx = (x - centerX) * SCALE;
-  const lz = -(y - centerY) * SCALE; // Invert Y to Z
-  const ly = (z - minZ) * Z_SCALE + 1.2; // Elevation slightly lifted above ground
+  const lz = -(y - centerY) * SCALE;
+  const ly = (z - minZ) * Z_SCALE + 0.6; // Hugs 1m terrain closely
   return new THREE.Vector3(lx, ly, lz);
 }
 
-// --- BUILD 3D RACE TRACK MESH (RIBBON / TUBE) ---
+// --- GRADIENT COLOR FOR SLOPE IN PERCENT ---
+function getGradientColor(grad) {
+  // grad in %: 0-25% (Green/Cyan) -> 25-50% (Amber) -> 50-80% (Red) -> 80%+ (Dark Red/Purple 'Freier Fall')
+  const c = new THREE.Color();
+  if (grad < 25) {
+    c.setRGB(0.06, 0.72, 0.51); // Gentle slope / gliding section
+  } else if (grad < 50) {
+    c.setRGB(0.96, 0.62, 0.04); // Medium race slope
+  } else if (grad < 75) {
+    c.setRGB(0.93, 0.27, 0.18); // Steep race pitch
+  } else {
+    c.setRGB(0.75, 0.05, 0.25); // Extreme section (>75%, e.g. Freier Fall 92%)
+  }
+  return c;
+}
+
+// --- BUILD HIGH-RESOLUTION 3D PISTENBAND (RIBBON MESH) ---
 let trackPoints3D = [];
-function buildTrackMesh() {
+function buildDetailedTrackRibbon() {
   while (trackGroup.children.length > 0) trackGroup.remove(trackGroup.children[0]);
-  if (!currentTrackData) return;
+  if (!currentTrackData || !currentTrackData.points) return;
 
-  trackPoints3D = currentTrackData.points.map(pt => worldToLocal(pt[0], pt[1], pt[2]));
+  const pts = currentTrackData.points;
+  trackPoints3D = pts.map(p => worldToLocal(p[0], p[1], p[2]));
 
-  // 1. Create CatmullRom Curve for smooth race track
-  const curve = new THREE.CatmullRomCurve3(trackPoints3D);
-  const trackColor = state.currentVenue === 'garmisch' ? 0xf59e0b : 0x10b981; // Amber for Alpine, Emerald for Biathlon
+  const ribbonWidth = state.currentVenue === 'garmisch' ? 1.4 : 1.0; // Piste width in 3D units (~15m wide)
+  const halfW = ribbonWidth / 2;
 
-  // Extrude TubeGeometry
-  const tubeGeo = new THREE.TubeGeometry(curve, 180, 1.2, 8, false);
-  const tubeMat = new THREE.MeshStandardMaterial({
-    color: trackColor,
-    emissive: trackColor,
-    emissiveIntensity: 0.55,
-    roughness: 0.3,
-    metalness: 0.2
-  });
-  const trackMesh = new THREE.Mesh(tubeGeo, tubeMat);
-  trackMesh.castShadow = true;
-  trackGroup.add(trackMesh);
+  const positions = [];
+  const colors = [];
+  const indices = [];
 
-  // If Ruhpolding, also add the 150m penalty loop in red
-  if (currentTrackData.penaltyLoop) {
-    const penaltyPoints = currentTrackData.penaltyLoop.map(pt => worldToLocal(pt[0], pt[1], pt[2]));
-    const penaltyCurve = new THREE.CatmullRomCurve3(penaltyPoints, true);
-    const penTubeGeo = new THREE.TubeGeometry(penaltyCurve, 32, 0.9, 6, true);
-    const penTubeMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444,
-      emissive: 0xef4444,
-      emissiveIntensity: 0.7,
-      roughness: 0.3
-    });
-    trackGroup.add(new THREE.Mesh(penTubeGeo, penTubeMat));
+  for (let i = 0; i < trackPoints3D.length; i++) {
+    const cur = trackPoints3D[i];
+    
+    // Compute tangent vector
+    let forward = new THREE.Vector3();
+    if (i < trackPoints3D.length - 1) {
+      forward.subVectors(trackPoints3D[i + 1], cur).normalize();
+    } else {
+      forward.subVectors(cur, trackPoints3D[i - 1]).normalize();
+    }
+
+    // Normal orthogonal to forward and world UP (0, 1, 0)
+    const side = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+    // Left and Right vertices of the track ribbon
+    const leftPt = new THREE.Vector3().copy(cur).addScaledVector(side, -halfW);
+    const rightPt = new THREE.Vector3().copy(cur).addScaledVector(side, halfW);
+
+    positions.push(leftPt.x, leftPt.y, leftPt.z);
+    positions.push(rightPt.x, rightPt.y, rightPt.z);
+
+    // Color based on slope gradient or sport
+    let c = new THREE.Color();
+    if (state.showGradientColors && currentTrackData.gradients) {
+      const grad = currentTrackData.gradients[i] || 0;
+      c = getGradientColor(grad);
+    } else {
+      c.setHex(state.currentVenue === 'garmisch' ? 0xf59e0b : 0x10b981);
+    }
+
+    colors.push(c.r, c.g, c.b);
+    colors.push(c.r, c.g, c.b);
+
+    if (i < trackPoints3D.length - 1) {
+      const i0 = i * 2;
+      const i1 = i * 2 + 1;
+      const i2 = (i + 1) * 2;
+      const i3 = (i + 1) * 2 + 1;
+
+      // Two triangles forming quad segment
+      indices.push(i0, i1, i2);
+      indices.push(i1, i3, i2);
+    }
   }
 
-  // 2. Animated Skier / Runner marker
-  const sphereGeo = new THREE.SphereGeometry(2.2, 16, 16);
+  const ribbonGeo = new THREE.BufferGeometry();
+  ribbonGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  ribbonGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  ribbonGeo.setIndex(indices);
+  ribbonGeo.computeVertexNormals();
+
+  const ribbonMat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    roughness: 0.35,
+    metalness: 0.15
+  });
+
+  const ribbonMesh = new THREE.Mesh(ribbonGeo, ribbonMat);
+  ribbonMesh.castShadow = true;
+  ribbonMesh.receiveShadow = true;
+  trackGroup.add(ribbonMesh);
+
+  // Centerline glow string
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(trackPoints3D);
+  const lineMat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    linewidth: 2,
+    transparent: true,
+    opacity: 0.8
+  });
+  const lineMesh = new THREE.Line(lineGeo, lineMat);
+  trackGroup.add(lineMesh);
+
+  // Penalty Loop for Ruhpolding
+  if (currentTrackData.penaltyLoop) {
+    const penPts = currentTrackData.penaltyLoop.map(p => worldToLocal(p[0], p[1], p[2]));
+    const penGeo = new THREE.BufferGeometry().setFromPoints(penPts);
+    const penMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
+    trackGroup.add(new THREE.LineLoop(penGeo, penMat));
+  }
+
+  // Skier / Runner Marker
+  const sphereGeo = new THREE.SphereGeometry(1.8, 16, 16);
   const sphereMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
     emissive: 0x38bdf8,
-    emissiveIntensity: 1.0,
+    emissiveIntensity: 1.2,
     roughness: 0.1
   });
   skierMarker = new THREE.Mesh(sphereGeo, sphereMat);
   trackGroup.add(skierMarker);
 
-  trackGroup.visible = state.showTrack;
+  trackGroup.visible = state.showTrackRibbon;
 }
 
 // --- BUILD MILESTONES (STATION FLAGS) ---
@@ -319,13 +388,13 @@ function buildMilestones() {
   while (milestonesGroup.children.length > 0) milestonesGroup.remove(milestonesGroup.children[0]);
   if (!currentTrackData || !currentTrackData.milestones) return;
 
-  currentTrackData.milestones.forEach((m, idx) => {
+  currentTrackData.milestones.forEach((m) => {
     const pos = worldToLocal(m.coord[0], m.coord[1], m.coord[2]);
     const group = new THREE.Group();
     group.position.copy(pos);
 
     // Mast
-    const mastGeo = new THREE.CylinderGeometry(0.3, 0.3, 6, 8);
+    const mastGeo = new THREE.CylinderGeometry(0.25, 0.25, 6, 8);
     mastGeo.translate(0, 3, 0);
     const mastMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.8 });
     group.add(new THREE.Mesh(mastGeo, mastMat));
@@ -337,7 +406,7 @@ function buildMilestones() {
     const flagMat = new THREE.MeshStandardMaterial({
       color: isSpecial ? 0xef4444 : 0x38bdf8,
       emissive: isSpecial ? 0xef4444 : 0x0284c7,
-      emissiveIntensity: 0.8
+      emissiveIntensity: 0.85
     });
     const flagMesh = new THREE.Mesh(flagGeo, flagMat);
     flagMesh.userData = { milestone: m };
@@ -372,7 +441,6 @@ function setCameraPreset(presetKey) {
       targetLook.copy(finishPt);
       break;
     case 'key':
-      // Focus on Freier Fall or Fischer S
       const keyM = currentTrackData.milestones.find(m => m.name.includes('Freier Fall') || m.name.includes('Fischer S'));
       if (keyM) {
         const kp = worldToLocal(keyM.coord[0], keyM.coord[1], keyM.coord[2]);
@@ -386,7 +454,6 @@ function setCameraPreset(presetKey) {
       break;
   }
 
-  // Smooth Camera Tween
   let step = 0;
   function tween() {
     if (step < 35) {
@@ -414,7 +481,7 @@ function updateUIForVenue() {
 
   document.getElementById('stat-length').textContent = `${d.lengthMeters.toLocaleString()} m`;
   document.getElementById('stat-drop').textContent = `${d.dropMeters ? d.dropMeters + ' m' : d.totalClimb + ' m Anstieg'}`;
-  document.getElementById('stat-elev').textContent = `${d.startElevation} / ${d.finishElevation} m`;
+  document.getElementById('stat-elev').textContent = `${Math.round(d.startElevation)} / ${Math.round(d.finishElevation)} m`;
 
   const specLabel = document.getElementById('stat-special-label');
   const specVal = document.getElementById('stat-special-val');
@@ -423,21 +490,8 @@ function updateUIForVenue() {
     specVal.textContent = `${d.maxGradientPercent} % (Freier Fall)`;
   } else {
     specLabel.textContent = 'Höchster Punkt';
-    specVal.textContent = `${d.highestPoint} m ü. NHN`;
+    specVal.textContent = `${Math.round(d.highestPoint)} m ü. NHN`;
   }
-
-  // Populate Camera Presets Buttons
-  const presetsContainer = document.getElementById('cam-presets-container');
-  presetsContainer.innerHTML = `
-    <button class="cam-btn" data-cam="iso"><i class="fa-solid fa-mountain"></i> Panorama</button>
-    <button class="cam-btn" data-cam="start"><i class="fa-solid fa-flag-checkered"></i> Startbereich</button>
-    <button class="cam-btn" data-cam="finish"><i class="fa-solid fa-bullseye"></i> Zielstadion</button>
-    <button class="cam-btn" data-cam="key"><i class="fa-solid fa-star"></i> Schlüsselstelle</button>
-    <button class="cam-btn" data-cam="top" style="grid-column: span 2;"><i class="fa-solid fa-compass"></i> Vogelperspektive</button>
-  `;
-  presetsContainer.querySelectorAll('.cam-btn').forEach(btn => {
-    btn.addEventListener('click', () => setCameraPreset(btn.dataset.cam));
-  });
 
   // Populate Milestones List
   const msList = document.getElementById('milestones-list');
@@ -447,7 +501,7 @@ function updateUIForVenue() {
     item.className = 'milestone-item';
     item.innerHTML = `
       <span><strong>${idx + 1}.</strong> ${m.name}</span>
-      <span class="milestone-elev">${m.coord[2]} m</span>
+      <span class="milestone-elev">${Math.round(m.coord[2])} m</span>
     `;
     item.addEventListener('click', () => {
       focusMilestone(m);
@@ -473,10 +527,9 @@ function focusMilestone(m) {
   }
   tween();
 
-  // Show Tooltip Card
   const tooltip = document.getElementById('milestone-tooltip');
   document.getElementById('tooltip-title').textContent = m.name;
-  document.getElementById('tooltip-elev').textContent = `${m.coord[2]} m`;
+  document.getElementById('tooltip-elev').textContent = `${Math.round(m.coord[2])} m`;
   document.getElementById('tooltip-desc').textContent = m.desc;
   tooltip.classList.add('active');
   setTimeout(() => tooltip.classList.remove('active'), 5000);
@@ -523,29 +576,23 @@ function drawElevationProfile() {
     ctx.fillText(`${elevLabel}m`, 4, gy + 3);
   }
 
-  // Draw Profile Area & Line
-  ctx.beginPath();
-  pts.forEach((p, i) => {
-    const x = padL + (i / (pts.length - 1)) * plotW;
-    const y = padT + plotH - ((p[2] - minE) / (maxE - minE)) * plotH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  // Draw Profile Line colored by gradient
+  for (let i = 0; i < pts.length - 1; i++) {
+    const x1 = padL + (i / (pts.length - 1)) * plotW;
+    const y1 = padT + plotH - ((pts[i][2] - minE) / (maxE - minE)) * plotH;
+    const x2 = padL + ((i + 1) / (pts.length - 1)) * plotW;
+    const y2 = padT + plotH - ((pts[i + 1][2] - minE) / (maxE - minE)) * plotH;
 
-  const strokeColor = state.currentVenue === 'garmisch' ? '#f59e0b' : '#10b981';
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
+    const grad = currentTrackData.gradients ? currentTrackData.gradients[i] : 20;
+    const strokeC = getGradientColor(grad);
 
-  // Gradient Fill under curve
-  ctx.lineTo(padL + plotW, padT + plotH);
-  ctx.lineTo(padL, padT + plotH);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-  grad.addColorStop(0, state.currentVenue === 'garmisch' ? 'rgba(245, 158, 11, 0.35)' : 'rgba(16, 185, 129, 0.35)');
-  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = grad;
-  ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = `#${strokeC.getHexString()}`;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
 
   // Milestone Markers on HUD
   currentTrackData.milestones.forEach(m => {
@@ -554,10 +601,10 @@ function drawElevationProfile() {
     const y = padT + plotH - ((m.coord[2] - minE) / (maxE - minE)) * plotH;
 
     ctx.beginPath();
-    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.arc(x, y, 4.0, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.strokeStyle = strokeColor;
+    ctx.strokeStyle = '#0284c7';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   });
@@ -565,7 +612,6 @@ function drawElevationProfile() {
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
-  // Venue Switcher
   document.querySelectorAll('.venue-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.venue-btn').forEach(b => b.classList.remove('active'));
@@ -574,7 +620,6 @@ function setupEventListeners() {
     });
   });
 
-  // Style Mode Buttons
   document.querySelectorAll('.style-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
@@ -584,11 +629,10 @@ function setupEventListeners() {
     });
   });
 
-  // Toggles
   const togTrack = document.getElementById('toggle-track');
   if (togTrack) togTrack.addEventListener('change', e => {
-    state.showTrack = e.target.checked;
-    trackGroup.visible = state.showTrack;
+    state.showTrackRibbon = e.target.checked;
+    trackGroup.visible = state.showTrackRibbon;
   });
 
   const togMilestones = document.getElementById('toggle-milestones');
@@ -615,11 +659,9 @@ function setupEventListeners() {
     controls.autoRotate = state.autoRotate;
   });
 
-  // Theme Toggle
   const themeBtn = document.getElementById('btn-theme-toggle');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
-  // Legal Modal
   const legalModal = document.getElementById('legal-modal');
   const openLegal = document.getElementById('btn-open-legal');
   const closeLegal = document.getElementById('btn-close-modal');
@@ -650,7 +692,6 @@ function toggleTheme() {
   ambientLight.intensity = state.isLightTheme ? 0.7 : 0.45;
 }
 
-// --- LOADER ---
 function updateLoader(show, text = '', progress = 0) {
   const overlay = document.getElementById('loader-overlay');
   const statusEl = document.getElementById('loader-status');
@@ -677,9 +718,8 @@ let animProgress = 0;
 function animate() {
   requestAnimationFrame(animate);
 
-  // Animate skier marker along the track
   if (state.showSimulation && skierMarker && trackPoints3D.length > 1) {
-    animProgress += 0.0035;
+    animProgress += 0.0018; // Smooth motion along micro-steps
     if (animProgress > 1.0) animProgress = 0;
 
     const totalPts = trackPoints3D.length - 1;
