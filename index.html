@@ -88,6 +88,10 @@
     </div>
 
     <div class="header-actions">
+      <button class="header-pov-btn cam-btn" data-cam="pov" title="Erste-Person Helmkamera mit Echtzeit-Geschwindigkeit starten">
+        <i class="fa-solid fa-person-skiing"></i>
+        <span>POV Renn-Abfahrt (Live)</span>
+      </button>
       <button id="btn-theme-toggle" class="icon-btn" title="Light/Dark Mode umschalten">
         <i class="fa-solid fa-circle-half-stroke"></i>
       </button>
@@ -129,6 +133,12 @@
           <span id="stat-special-val" class="stat-val">92 % (Freier Fall)</span>
         </div>
       </div>
+
+      <!-- Prominent Top-of-Sidebar POV Action Button -->
+      <button class="cam-btn pov-hero-btn" data-cam="pov">
+        <i class="fa-solid fa-video"></i>
+        <span id="lbl-pov-hero">POV Helmkamera starten (1:49.4 min)</span>
+      </button>
     </div>
 
     <!-- 3D Visualization Modes -->
@@ -258,6 +268,9 @@
       </div>
       <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil oder klicke für 3D-Zoom / POV-Einstieg</div>
       <div class="hud-actions">
+        <button class="hud-action-btn pov-hud-trigger cam-btn" data-cam="pov" title="POV Helmkamera starten">
+          <i class="fa-solid fa-person-skiing"></i> <span>POV-Fahrt</span>
+        </button>
         <button id="btn-hud-expand" class="hud-action-btn" title="Höhenprofil groß aufklappen / verkleinern">
           <i class="fa-solid fa-up-right-and-down-left-from-center"></i> <span>Großansicht</span>
         </button>

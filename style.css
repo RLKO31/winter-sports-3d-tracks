@@ -496,22 +496,52 @@ body {
   border-color: var(--accent-blue);
 }
 
-.cam-btn.pov-launch-btn {
+.cam-btn.pov-launch-btn,
+.cam-btn.pov-hero-btn {
   grid-column: span 2;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(239, 68, 68, 0.28));
-  border-color: rgba(245, 158, 11, 0.65);
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border: 1px solid #fde047;
   color: #fff;
-  font-weight: 700;
+  font-weight: 800;
   justify-content: center;
-  padding: 9px 12px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+
+.cam-btn.pov-hero-btn {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 0.84rem;
+}
+
+.header-pov-btn {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border: 1px solid #fde047;
+  color: #fff;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+}
+
+.hud-action-btn.pov-hud-trigger {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(239, 68, 68, 0.35));
+  border-color: #f59e0b;
+  color: #fde047;
+  font-weight: 700;
 }
 
 .cam-btn.pov-launch-btn:hover,
-.cam-btn.pov-launch-btn.active {
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
+.cam-btn.pov-launch-btn.active,
+.cam-btn.pov-hero-btn:hover,
+.cam-btn.pov-hero-btn.active,
+.header-pov-btn:hover,
+.header-pov-btn.active {
+  background: linear-gradient(135deg, #fbbf24, #dc2626);
   border-color: #fff;
   color: #fff;
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.7);
+  transform: translateY(-1px);
 }
 
 /* Live First-Person POV Telemetry HUD */

@@ -812,8 +812,9 @@ function startPovMode(startAtIndex = 0) {
   const povHud = document.getElementById('pov-telemetry-hud');
   if (povHud) povHud.classList.add('active');
 
-  const povBtn = document.querySelector('.cam-btn[data-cam="pov"]');
-  if (povBtn) povBtn.classList.add('active');
+  document.querySelectorAll('.cam-btn[data-cam="pov"]').forEach(btn => {
+    btn.classList.add('active');
+  });
 
   const pauseBtn = document.getElementById('btn-pov-pause');
   if (pauseBtn) pauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
@@ -831,8 +832,9 @@ function stopPovMode() {
   const povHud = document.getElementById('pov-telemetry-hud');
   if (povHud) povHud.classList.remove('active');
 
-  const povBtn = document.querySelector('.cam-btn[data-cam="pov"]');
-  if (povBtn) povBtn.classList.remove('active');
+  document.querySelectorAll('.cam-btn[data-cam="pov"]').forEach(btn => {
+    btn.classList.remove('active');
+  });
 }
 
 function updatePovCameraAndHud(dtSec) {
@@ -994,12 +996,18 @@ function updateUIForVenue() {
     specVal.textContent = `${Math.round(d.highestPoint)} m ü. NHN`;
   }
 
-  // Update Camera Preset Button Label for Key Section
+  // Update Camera Preset Button Label for Key Section & POV Hero Button
   const keyCamBtn = document.querySelector('.cam-btn[data-cam="key"]');
   if (keyCamBtn) {
     keyCamBtn.innerHTML = d.sport === 'Ski Alpin'
       ? '<i class="fa-solid fa-bolt"></i> Freier Fall (92%)'
       : '<i class="fa-solid fa-bolt"></i> Fischer-S & Schießstand';
+  }
+  const povHeroLbl = document.getElementById('lbl-pov-hero');
+  if (povHeroLbl) {
+    povHeroLbl.textContent = d.sport === 'Ski Alpin'
+      ? 'POV Helmkamera starten (1:49.4 min)'
+      : 'POV Loipen-Kamera starten (7:42.0 min)';
   }
 
   // Populate Milestones List
