@@ -781,21 +781,27 @@ function drawElevationProfile() {
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
+  const w = Math.max(100, Math.floor(rect.width));
+  const h = Math.max(40, Math.floor(rect.height));
+
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const is80s = state.editionTab === 'retro80s';
   const pts = currentTrackData.points;
   const elevs = pts.map(p => p[2]);
-  const minE = Math.min(...elevs) - 20;
-  const maxE = Math.max(...elevs) + 20;
+  const rawMin = Math.min(...elevs);
+  const rawMax = Math.max(...elevs);
+  const span = Math.max(20, rawMax - rawMin);
+  const minE = rawMin - span * 0.08;
+  const maxE = rawMax + span * 0.08;
 
-  const w = rect.width;
-  const h = rect.height;
-  const padL = 44, padR = 20, padT = 10, padB = 18;
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
+  const padL = 48, padR = 16, padT = 10, padB = 14;
+  const plotW = Math.max(10, w - padL - padR);
+  const plotH = Math.max(10, h - padT - padB);
 
   ctx.clearRect(0, 0, w, h);
 
@@ -943,8 +949,8 @@ function setupEventListeners() {
     elevCanvas.addEventListener('mousemove', e => {
       if (!currentTrackData || !currentTrackData.points) return;
       const rect = elevCanvas.getBoundingClientRect();
-      const padL = 44, padR = 20;
-      const plotW = rect.width - padL - padR;
+      const padL = 48, padR = 16;
+      const plotW = Math.max(10, rect.width - padL - padR);
       const relX = THREE.MathUtils.clamp((e.clientX - rect.left - padL) / plotW, 0, 1);
       const pts = currentTrackData.points;
       const idx = Math.round(relX * (pts.length - 1));
