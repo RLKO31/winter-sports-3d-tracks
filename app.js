@@ -14,7 +14,20 @@ const state = {
   showWireframe: false,
   autoRotate: false,
   isLightTheme: false,
-  hoverPointIndex: null
+  hoverPointIndex: null,
+  povActive: false,
+  povPaused: false,
+  povSpeedMult: 1,
+  hudExpanded: false,
+  hudFolded: false
+};
+
+// Physics-calculated telemetry arrays for the active track
+let trackTelemetry = {
+  speedsKmh: [],      // Instantaneous speed (km/h) at each track point
+  cumDistM: [],       // Cumulative distance (m) at each track point
+  cumTimeSec: [],     // Elapsed race time (s) at each track point
+  totalTimeSec: 109.5 // Total race duration (s)
 };
 
 // --- GLOBALS ---
@@ -224,6 +237,7 @@ async function switchVenue(venueKey) {
     updateLoader(true, 'Rendere HD-Streckenkurven & 3D-Pistenband...', 70);
 
     buildTerrainMesh();
+    computeTrackPhysicsTelemetry();
     buildDetailedTrackRibbon();
     buildMilestones();
     buildRetro80sBackdrop();
@@ -431,6 +445,133 @@ function buildRetro80sBackdrop() {
   const sunMesh = new THREE.Mesh(sunGeo, sunMat);
   sunMesh.position.set(20, 95, -175);
   retroDecorGroup.add(sunMesh);
+}
+
+// --- REALISTIC FIS / IBU RACE PHYSICS & SPEED TELEMETRY ENGINE ---
+// Calculates authentic racer speed (km/h) and elapsed split times at every 3m point:
+// - Garmisch Kandahar Men's Downhill: Target winning time ~1:49.5 (109.5s), Top speed ~136 km/h at Freier Fall / Hölle
+// - Ruhpolding 3.3km Biathlon Loop: Target elite loop time ~7:42 (462s), Avg ~25.7 km/h, 13 km/h climbs, 46 km/h descents
+function computeTrackPhysicsTelemetry() {
+  if (!currentTrackData || !currentTrackData.points) return;
+  const pts = currentTrackData.points;
+  const n = pts.length;
+  const isAlpine = currentTrackData.sport === 'Ski Alpin';
+
+  const rawSpeedsKmh = new Array(n).fill(0);
+  const cumDistM = new Array(n).fill(0);
+  const segDistM = new Array(n).fill(0);
+
+  for (let i = 1; i < n; i++) {
+    const dx = pts[i][0] - pts[i - 1][0];
+    const dy = pts[i][1] - pts[i - 1][1];
+    const d = Math.hypot(dx, dy);
+    segDistM[i] = Math.max(0.5, d);
+    cumDistM[i] = cumDistM[i - 1] + d;
+  }
+
+  // Scale segment distances slightly so cumulative distance matches official homologated lengthMeters
+  const totalRawDist = cumDistM[n - 1] || 1;
+  const distScale = currentTrackData.lengthMeters / totalRawDist;
+  for (let i = 1; i < n; i++) {
+    segDistM[i] *= distScale;
+    cumDistM[i] *= distScale;
+  }
+
+  if (isAlpine) {
+    // Alpine Downhill Physics Simulation (Gravity vs Snow Friction, Aerodynamic Drag & Carving Turn G-Force Braking)
+    let v = 3.8; // m/s push-off out of the Kreuzjoch start gate (~14 km/h)
+    rawSpeedsKmh[0] = v * 3.6;
+
+    for (let i = 1; i < n; i++) {
+      const ds = segDistM[i];
+      const dz = pts[i - 1][2] - pts[i][2]; // drop in meters
+      const sinTheta = THREE.MathUtils.clamp(dz / ds, 0, 0.72);
+
+      // Compute horizontal curvature (turn sharpness) over a +/- 3 point window
+      let turnAngle = 0;
+      if (i >= 3 && i < n - 3) {
+        const v1x = pts[i][0] - pts[i - 3][0];
+        const v1y = pts[i][1] - pts[i - 3][1];
+        const v2x = pts[i + 3][0] - pts[i][0];
+        const v2y = pts[i + 3][1] - pts[i][1];
+        const mag1 = Math.hypot(v1x, v1y) || 1;
+        const mag2 = Math.hypot(v2x, v2y) || 1;
+        const dot = THREE.MathUtils.clamp((v1x * v2x + v1y * v2y) / (mag1 * mag2), -1, 1);
+        turnAngle = Math.acos(dot); // radians
+      }
+
+      // Target equilibrium speed on current pitch & curvature
+      // Steep pitches (50-92%) accelerate toward 125-138 km/h; sharp carving turns (S-Kurve, Olympia-Kurve) scrub speed to 82-95 km/h
+      const slopeBoostKmh = 72 + Math.pow(sinTheta, 0.75) * 98;
+      const turnPenaltyKmh = Math.min(44, turnAngle * 58);
+      const targetKmh = THREE.MathUtils.clamp(slopeBoostKmh - turnPenaltyKmh, 68, 138);
+      const targetV = targetKmh / 3.6;
+
+      // Smooth physical acceleration / braking inertia along ds
+      const rate = targetV > v ? 0.042 : 0.065;
+      v = v + (targetV - v) * Math.min(1, ds * rate);
+      rawSpeedsKmh[i] = v * 3.6;
+    }
+  } else {
+    // Biathlon Cross-Country Skating Physics (Ruhpolding 3.3 km loop)
+    let v = 6.0; // m/s stadium start (~21.6 km/h)
+    rawSpeedsKmh[0] = v * 3.6;
+
+    for (let i = 1; i < n; i++) {
+      const ds = segDistM[i];
+      const dz = pts[i][2] - pts[i - 1][2]; // positive = uphill climb, negative = downhill
+      const grade = dz / ds;
+
+      let targetKmh = 25.5;
+      if (grade > 0.02) {
+        // Steep skating climb (Hochwald): drops to 13 - 17 km/h
+        targetKmh = Math.max(12.5, 25.5 - grade * 115);
+      } else if (grade < -0.02) {
+        // Fast descent (Speed-Abfahrt): accelerates up to 44 - 48 km/h
+        targetKmh = Math.min(47.0, 26.5 + Math.abs(grade) * 165);
+      }
+      const targetV = targetKmh / 3.6;
+      v = v + (targetV - v) * Math.min(1, ds * 0.05);
+      rawSpeedsKmh[i] = v * 3.6;
+    }
+  }
+
+  // Calibrate exact total race time to match official World Cup reference time:
+  // - Garmisch Kandahar Men's Downhill: 109.4s (1:49.4, right in the 1:47.5 - 1:52 World Cup winning window)
+  // - Ruhpolding 3.3km Biathlon Sprint Loop: 462.0s (7:42.0 elite World Cup ski loop time)
+  const targetTotalSec = isAlpine ? 109.4 : 462.0;
+  let unscaledTotalSec = 0;
+  for (let i = 1; i < n; i++) {
+    const avgV = ((rawSpeedsKmh[i - 1] + rawSpeedsKmh[i]) * 0.5) / 3.6;
+    unscaledTotalSec += segDistM[i] / Math.max(1.0, avgV);
+  }
+
+  const speedScale = unscaledTotalSec / targetTotalSec;
+  const speedsKmh = new Array(n).fill(0);
+  const cumTimeSec = new Array(n).fill(0);
+
+  for (let i = 0; i < n; i++) {
+    speedsKmh[i] = Math.round(rawSpeedsKmh[i] * speedScale * 10) / 10;
+    if (i > 0) {
+      const avgV = ((speedsKmh[i - 1] + speedsKmh[i]) * 0.5) / 3.6;
+      cumTimeSec[i] = cumTimeSec[i - 1] + segDistM[i] / Math.max(1.0, avgV);
+    }
+  }
+
+  trackTelemetry = {
+    speedsKmh,
+    cumDistM,
+    cumTimeSec,
+    totalTimeSec: cumTimeSec[n - 1] || targetTotalSec
+  };
+}
+
+function formatRaceTime(sec) {
+  const mins = Math.floor(sec / 60);
+  const rem = sec - mins * 60;
+  const sInt = Math.floor(rem);
+  const tenths = Math.floor((rem - sInt) * 10);
+  return `${String(mins).padStart(2, '0')}:${String(sInt).padStart(2, '0')}.${tenths}`;
 }
 
 // --- CONVERT WORLD COORDINATES TO THREE.JS LOCAL SCENE ---
@@ -656,9 +797,127 @@ function buildMilestones() {
   milestonesGroup.visible = state.showMilestones;
 }
 
-// --- CAMERA PRESET VIEWS ---
+// --- CAMERA PRESET VIEWS & FIRST-PERSON POV MODE ---
+let povElapsedSec = 0;
+
+function startPovMode(startAtIndex = 0) {
+  if (!currentTrackData || !trackTelemetry.cumTimeSec.length) return;
+  state.povActive = true;
+  state.povPaused = false;
+  povElapsedSec = trackTelemetry.cumTimeSec[startAtIndex] || 0;
+
+  controls.enabled = false;
+  controls.autoRotate = false;
+
+  const povHud = document.getElementById('pov-telemetry-hud');
+  if (povHud) povHud.classList.add('active');
+
+  const povBtn = document.querySelector('.cam-btn[data-cam="pov"]');
+  if (povBtn) povBtn.classList.add('active');
+
+  const pauseBtn = document.getElementById('btn-pov-pause');
+  if (pauseBtn) pauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+
+  updatePovCameraAndHud(0);
+}
+
+function stopPovMode() {
+  if (!state.povActive) return;
+  state.povActive = false;
+  state.povPaused = false;
+  controls.enabled = true;
+  controls.autoRotate = state.autoRotate;
+
+  const povHud = document.getElementById('pov-telemetry-hud');
+  if (povHud) povHud.classList.remove('active');
+
+  const povBtn = document.querySelector('.cam-btn[data-cam="pov"]');
+  if (povBtn) povBtn.classList.remove('active');
+}
+
+function updatePovCameraAndHud(dtSec) {
+  if (!state.povActive || !currentTrackData || trackPoints3D.length < 2) return;
+
+  if (!state.povPaused) {
+    povElapsedSec += dtSec * state.povSpeedMult;
+    if (povElapsedSec >= trackTelemetry.totalTimeSec) {
+      povElapsedSec = 0; // Loop back to start gate after crossing the finish line
+    }
+  }
+
+  // Binary search in trackTelemetry.cumTimeSec for current exact track position
+  const times = trackTelemetry.cumTimeSec;
+  const n = times.length;
+  let lo = 0, hi = n - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] <= povElapsedSec) lo = mid;
+    else hi = mid;
+  }
+
+  const segDuration = Math.max(0.0001, times[hi] - times[lo]);
+  const ratio = THREE.MathUtils.clamp((povElapsedSec - times[lo]) / segDuration, 0, 1);
+
+  // Current 3D position on track
+  const curPos = new THREE.Vector3().lerpVectors(trackPoints3D[lo], trackPoints3D[hi], ratio);
+  if (skierMarker) {
+    skierMarker.position.copy(curPos);
+  }
+
+  // Look-ahead point (~38 meters ahead along the track for smooth high-speed carving camera)
+  const lookAheadIdx = Math.min(n - 1, lo + 12);
+  const lookAheadNext = Math.min(n - 1, lookAheadIdx + 1);
+  const lookTarget = new THREE.Vector3().lerpVectors(trackPoints3D[lookAheadIdx], trackPoints3D[lookAheadNext], ratio);
+
+  // Position helmet camera slightly above the snow surface (eye height ~1.75m in scaled scene units)
+  const camEye = curPos.clone();
+  camEye.y += 1.45;
+  camera.position.lerp(camEye, 0.35);
+
+  const smoothLook = lookTarget.clone();
+  smoothLook.y += 0.6;
+  controls.target.lerp(smoothLook, 0.35);
+  camera.lookAt(controls.target);
+
+  // Interpolate live telemetry metrics
+  const curSpeed = THREE.MathUtils.lerp(trackTelemetry.speedsKmh[lo], trackTelemetry.speedsKmh[hi], ratio);
+  const curDist = THREE.MathUtils.lerp(trackTelemetry.cumDistM[lo], trackTelemetry.cumDistM[hi], ratio);
+  const curElev = THREE.MathUtils.lerp(currentTrackData.points[lo][2], currentTrackData.points[hi][2], ratio);
+  const curGrad = currentTrackData.gradients ? currentTrackData.gradients[lo] : 0;
+
+  // Find current course section name from milestones
+  let activeMilestone = currentTrackData.milestones[0]?.name || '';
+  for (const m of currentTrackData.milestones) {
+    if (lo >= m.pointIndex) activeMilestone = m.name;
+  }
+
+  // Update DOM Telemetry HUD
+  const elSpeed = document.getElementById('pov-speed-val');
+  const elTime = document.getElementById('pov-time-val');
+  const elGrad = document.getElementById('pov-grad-val');
+  const elElev = document.getElementById('pov-elev-val');
+  const elSec = document.getElementById('pov-section-name');
+
+  if (elSpeed) elSpeed.innerHTML = `${Math.round(curSpeed)} <small>km/h</small>`;
+  if (elTime) elTime.textContent = formatRaceTime(povElapsedSec);
+  if (elGrad) elGrad.textContent = `${curGrad} %`;
+  if (elElev) elElev.textContent = `${Math.round(curElev)} m | ${Math.round(curDist)} m`;
+  if (elSec) elSec.textContent = activeMilestone;
+
+  // Sync elevation profile playhead with live POV position
+  state.hoverPointIndex = lo;
+  drawElevationProfile();
+}
+
 function setCameraPreset(presetKey) {
   if (!currentTrackData) return;
+  if (presetKey === 'pov') {
+    if (state.povActive) stopPovMode();
+    else startPovMode(0);
+    return;
+  }
+
+  stopPovMode();
   const targetCam = new THREE.Vector3();
   const targetLook = new THREE.Vector3(0, 0, 0);
 
@@ -773,16 +1032,16 @@ function focusMilestone(m) {
   setTimeout(() => tooltip.classList.remove('active'), 5000);
 }
 
-// --- DRAW INTERACTIVE ELEVATION PROFILE HUD (CANVAS) ---
+// --- DRAW INTERACTIVE ELEVATION & SPEED PROFILE HUD (CANVAS) ---
 function drawElevationProfile() {
   const canvas = document.getElementById('elevation-canvas');
-  if (!canvas || !currentTrackData) return;
+  const wrapper = canvas ? canvas.parentElement : null;
+  if (!canvas || !wrapper || !currentTrackData || state.hudFolded) return;
 
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const w = Math.max(100, Math.floor(rect.width));
-  const h = Math.max(40, Math.floor(rect.height));
+  const w = Math.max(200, wrapper.clientWidth || 720);
+  const h = Math.max(70, wrapper.clientHeight || 120);
 
   if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
     canvas.width = Math.floor(w * dpr);
@@ -796,32 +1055,47 @@ function drawElevationProfile() {
   const rawMin = Math.min(...elevs);
   const rawMax = Math.max(...elevs);
   const span = Math.max(20, rawMax - rawMin);
-  const minE = rawMin - span * 0.08;
-  const maxE = rawMax + span * 0.08;
+  const minE = rawMin - span * 0.1;
+  const maxE = rawMax + span * 0.12;
 
-  const padL = 48, padR = 16, padT = 10, padB = 14;
-  const plotW = Math.max(10, w - padL - padR);
-  const plotH = Math.max(10, h - padT - padB);
+  const padL = 50, padR = 46, padT = 14, padB = 22;
+  const plotW = Math.max(20, w - padL - padR);
+  const plotH = Math.max(20, h - padT - padB);
 
   ctx.clearRect(0, 0, w, h);
 
-  // Background Gridlines
+  // 1. Horizontal Elevation Gridlines & Left Y-Axis Labels (m)
   ctx.strokeStyle = is80s ? 'rgba(0, 240, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)';
   ctx.lineWidth = 1;
-  for (let s = 0; s <= 3; s++) {
-    const gy = padT + (plotH / 3) * s;
+  const rows = state.hudExpanded ? 5 : 3;
+  for (let s = 0; s <= rows; s++) {
+    const gy = padT + (plotH / rows) * s;
     ctx.beginPath();
     ctx.moveTo(padL, gy);
     ctx.lineTo(w - padR, gy);
     ctx.stroke();
 
-    const elevLabel = Math.round(maxE - ((maxE - minE) / 3) * s);
-    ctx.fillStyle = is80s ? '#ffe600' : '#64748b';
+    const elevLabel = Math.round(maxE - ((maxE - minE) / rows) * s);
+    ctx.fillStyle = is80s ? '#ffe600' : '#94a3b8';
     ctx.font = is80s ? 'bold 10px JetBrains Mono' : '10px JetBrains Mono';
+    ctx.textAlign = 'left';
     ctx.fillText(`${elevLabel}m`, 4, gy + 3);
   }
 
-  // Subtle area fill under profile
+  // 2. Bottom X-Axis Distance Ticks (0 m -> Finish)
+  const totalDist = currentTrackData.lengthMeters || 3050;
+  const distTicks = 5;
+  for (let d = 0; d <= distTicks; d++) {
+    const frac = d / distTicks;
+    const gx = padL + frac * plotW;
+    const distVal = Math.round(frac * totalDist);
+    ctx.fillStyle = is80s ? '#00f0ff' : '#64748b';
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = d === 0 ? 'left' : (d === distTicks ? 'right' : 'center');
+    ctx.fillText(`${distVal}m`, gx, h - 4);
+  }
+
+  // 3. Subtle Area Fill Under Elevation Profile
   ctx.beginPath();
   ctx.moveTo(padL, padT + plotH);
   for (let i = 0; i < pts.length; i++) {
@@ -836,13 +1110,41 @@ function drawElevationProfile() {
     areaGrad.addColorStop(0, 'rgba(255, 0, 127, 0.38)');
     areaGrad.addColorStop(1, 'rgba(0, 240, 255, 0.05)');
   } else {
-    areaGrad.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
+    areaGrad.addColorStop(0, 'rgba(56, 189, 248, 0.24)');
     areaGrad.addColorStop(1, 'rgba(56, 189, 248, 0.02)');
   }
   ctx.fillStyle = areaGrad;
   ctx.fill();
 
-  // Draw Profile Line colored by gradient
+  // 4. Dashed Racer Speed Curve Overlay (km/h) & Right Y-Axis Speed Labels
+  if (trackTelemetry.speedsKmh && trackTelemetry.speedsKmh.length === pts.length) {
+    const maxSpd = currentTrackData.sport === 'Ski Alpin' ? 145 : 55;
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([4, 3]);
+    for (let i = 0; i < pts.length; i++) {
+      const x = padL + (i / (pts.length - 1)) * plotW;
+      const spd = trackTelemetry.speedsKmh[i] || 0;
+      const y = padT + plotH - THREE.MathUtils.clamp(spd / maxSpd, 0, 1) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = is80s ? 'rgba(0, 240, 255, 0.75)' : 'rgba(251, 191, 36, 0.65)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.restore();
+
+    // Right Y-axis speed labels
+    ctx.fillStyle = is80s ? '#00f0ff' : '#fbbf24';
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${maxSpd}km/h`, w - 3, padT + 6);
+    ctx.fillText(`${Math.round(maxSpd / 2)}km/h`, w - 3, padT + plotH / 2 + 3);
+    ctx.fillText(`0km/h`, w - 3, padT + plotH);
+    ctx.textAlign = 'left';
+  }
+
+  // 5. Main Elevation Profile Line Colored by Slope Gradient
   for (let i = 0; i < pts.length - 1; i++) {
     const x1 = padL + (i / (pts.length - 1)) * plotW;
     const y1 = padT + plotH - ((pts[i][2] - minE) / (maxE - minE)) * plotH;
@@ -856,26 +1158,37 @@ function drawElevationProfile() {
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.strokeStyle = `#${strokeC.getHexString()}`;
-    ctx.lineWidth = is80s ? 3.2 : 2.5;
+    ctx.lineWidth = is80s ? 3.2 : 2.6;
     ctx.stroke();
   }
 
-  // Milestone Markers on HUD
-  currentTrackData.milestones.forEach(m => {
+  // 6. Milestone Markers & Labels (Labels shown in Expanded Board mode!)
+  currentTrackData.milestones.forEach((m, idx) => {
     const i = m.pointIndex;
     const x = padL + (i / (pts.length - 1)) * plotW;
     const y = padT + plotH - ((m.coord[2] - minE) / (maxE - minE)) * plotH;
 
     ctx.beginPath();
-    ctx.arc(x, y, is80s ? 4.8 : 4.0, 0, Math.PI * 2);
+    ctx.arc(x, y, is80s ? 4.8 : 4.2, 0, Math.PI * 2);
     ctx.fillStyle = is80s ? '#ffe600' : '#ffffff';
     ctx.fill();
     ctx.strokeStyle = is80s ? '#ff007f' : '#0284c7';
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    if (state.hudExpanded || idx === 0 || idx === currentTrackData.milestones.length - 1 || m.name.includes('Freier Fall')) {
+      const shortName = m.name.split('(')[0].trim();
+      ctx.save();
+      ctx.fillStyle = is80s ? '#ffffff' : '#e2e8f0';
+      ctx.font = 'bold 10px Plus Jakarta Sans, sans-serif';
+      ctx.textAlign = idx === 0 ? 'left' : (idx === currentTrackData.milestones.length - 1 ? 'right' : 'center');
+      const labelY = Math.max(padT + 10, y - 9);
+      ctx.fillText(shortName, x, labelY);
+      ctx.restore();
+    }
   });
 
-  // Hover Indicator Line
+  // 7. Interactive Hover / POV Playhead Indicator Line
   if (state.hoverPointIndex !== null && pts[state.hoverPointIndex]) {
     const hi = state.hoverPointIndex;
     const hx = padL + (hi / (pts.length - 1)) * plotW;
@@ -885,13 +1198,16 @@ function drawElevationProfile() {
     ctx.moveTo(hx, padT);
     ctx.lineTo(hx, padT + plotH);
     ctx.strokeStyle = is80s ? '#ffe600' : '#38bdf8';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
+    ctx.arc(hx, hy, 6.0, 0, Math.PI * 2);
     ctx.fillStyle = is80s ? '#ff007f' : '#38bdf8';
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 }
 
@@ -942,45 +1258,129 @@ function setupEventListeners() {
     });
   });
 
-  // Interactive Elevation Profile Canvas (Hover & Click to fly to track point)
+  // Interactive Elevation Profile Canvas (Hover & Click to fly to track point or jump in POV)
   const elevCanvas = document.getElementById('elevation-canvas');
   const hoverInfo = document.getElementById('hud-hover-info');
   if (elevCanvas) {
     elevCanvas.addEventListener('mousemove', e => {
       if (!currentTrackData || !currentTrackData.points) return;
       const rect = elevCanvas.getBoundingClientRect();
-      const padL = 48, padR = 16;
-      const plotW = Math.max(10, rect.width - padL - padR);
+      const padL = 50, padR = 46;
+      const plotW = Math.max(20, rect.width - padL - padR);
       const relX = THREE.MathUtils.clamp((e.clientX - rect.left - padL) / plotW, 0, 1);
       const pts = currentTrackData.points;
       const idx = Math.round(relX * (pts.length - 1));
       state.hoverPointIndex = idx;
 
-      const distM = Math.round(relX * currentTrackData.lengthMeters);
+      const distM = Math.round(trackTelemetry.cumDistM[idx] || relX * currentTrackData.lengthMeters);
       const elevM = Math.round(pts[idx][2]);
       const gradPct = currentTrackData.gradients ? currentTrackData.gradients[idx] : 0;
+      const spdKmh = trackTelemetry.speedsKmh[idx] ? Math.round(trackTelemetry.speedsKmh[idx]) : 0;
+      const splitTime = formatRaceTime(trackTelemetry.cumTimeSec[idx] || 0);
       if (hoverInfo) {
-        hoverInfo.textContent = `Distanz: ${distM} m | Höhe: ${elevM} m | Gefälle: ${gradPct} % (Klicken für 3D-Zoom)`;
+        hoverInfo.textContent = `${distM} m | Höhe: ${elevM} m | Gefälle: ${gradPct}% | Tempo: ${spdKmh} km/h | Zeit: ${splitTime}`;
       }
       drawElevationProfile();
     });
 
     elevCanvas.addEventListener('mouseleave', () => {
-      state.hoverPointIndex = null;
+      if (!state.povActive) state.hoverPointIndex = null;
       if (hoverInfo) {
-        hoverInfo.textContent = 'Bewege die Maus über das Profil oder klicke auf einen Abschnitt';
+        hoverInfo.textContent = 'Bewege die Maus über das Profil oder klicke für 3D-Zoom / POV-Einstieg';
       }
       drawElevationProfile();
     });
 
     elevCanvas.addEventListener('click', () => {
       if (state.hoverPointIndex !== null && trackPoints3D[state.hoverPointIndex]) {
-        const pt = trackPoints3D[state.hoverPointIndex];
-        const targetCam = new THREE.Vector3(pt.x + 22, pt.y + 16, pt.z + 28);
-        tweenCamera(targetCam, pt);
+        if (state.povActive) {
+          // Jump POV racer directly to clicked point on the elevation profile!
+          povElapsedSec = trackTelemetry.cumTimeSec[state.hoverPointIndex] || 0;
+          updatePovCameraAndHud(0);
+        } else {
+          const pt = trackPoints3D[state.hoverPointIndex];
+          const targetCam = new THREE.Vector3(pt.x + 22, pt.y + 16, pt.z + 28);
+          tweenCamera(targetCam, pt);
+        }
       }
     });
   }
+
+  // Foldable & Expandable Elevation Profile Board Controls
+  const hudPanel = document.getElementById('elevation-hud-panel');
+  const btnExpand = document.getElementById('btn-hud-expand');
+  const btnFold = document.getElementById('btn-hud-fold');
+
+  if (btnExpand && hudPanel) {
+    btnExpand.addEventListener('click', () => {
+      state.hudFolded = false;
+      state.hudExpanded = !state.hudExpanded;
+      hudPanel.classList.remove('folded');
+      hudPanel.classList.toggle('expanded', state.hudExpanded);
+      btnExpand.innerHTML = state.hudExpanded
+        ? '<i class="fa-solid fa-down-left-and-up-right-to-center"></i> <span>Normalansicht</span>'
+        : '<i class="fa-solid fa-up-right-and-down-left-from-center"></i> <span>Großansicht</span>';
+      if (btnFold) btnFold.innerHTML = '<i class="fa-solid fa-chevron-down"></i> <span>Einklappen</span>';
+      // Redraw multiple times during CSS height transition so canvas stays razor-sharp
+      [50, 150, 310].forEach(ms => setTimeout(drawElevationProfile, ms));
+    });
+  }
+
+  if (btnFold && hudPanel) {
+    btnFold.addEventListener('click', () => {
+      state.hudFolded = !state.hudFolded;
+      if (state.hudFolded) state.hudExpanded = false;
+      hudPanel.classList.toggle('folded', state.hudFolded);
+      hudPanel.classList.remove('expanded');
+      btnFold.innerHTML = state.hudFolded
+        ? '<i class="fa-solid fa-chevron-up"></i> <span>Aufklappen</span>'
+        : '<i class="fa-solid fa-chevron-down"></i> <span>Einklappen</span>';
+      if (btnExpand) {
+        btnExpand.innerHTML = '<i class="fa-solid fa-up-right-and-down-left-from-center"></i> <span>Großansicht</span>';
+      }
+      if (!state.hudFolded) {
+        [50, 150, 310].forEach(ms => setTimeout(drawElevationProfile, ms));
+      }
+    });
+  }
+
+  // First-Person POV Telemetry HUD Controls
+  const btnPovExit = document.getElementById('btn-pov-exit');
+  const btnPovPause = document.getElementById('btn-pov-pause');
+  const btnPovRestart = document.getElementById('btn-pov-restart');
+
+  if (btnPovExit) {
+    btnPovExit.addEventListener('click', () => {
+      stopPovMode();
+      setCameraPreset('iso');
+    });
+  }
+
+  if (btnPovPause) {
+    btnPovPause.addEventListener('click', () => {
+      state.povPaused = !state.povPaused;
+      btnPovPause.innerHTML = state.povPaused
+        ? '<i class="fa-solid fa-play"></i> Weiter'
+        : '<i class="fa-solid fa-pause"></i> Pause';
+    });
+  }
+
+  if (btnPovRestart) {
+    btnPovRestart.addEventListener('click', () => {
+      povElapsedSec = 0;
+      state.povPaused = false;
+      if (btnPovPause) btnPovPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+      updatePovCameraAndHud(0);
+    });
+  }
+
+  document.querySelectorAll('.pov-mult-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.pov-mult-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.povSpeedMult = parseFloat(btn.dataset.mult) || 1;
+    });
+  });
 
   const togTrack = document.getElementById('toggle-track');
   if (togTrack) togTrack.addEventListener('change', e => {
@@ -1081,20 +1481,38 @@ function onWindowResize() {
 
 // --- ANIMATION LOOP ---
 let animProgress = 0;
+let lastFrameTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
 
+  const now = performance.now();
+  const dtSec = Math.min(0.1, (now - lastFrameTime) / 1000);
+  lastFrameTime = now;
+
+  if (state.povActive) {
+    updatePovCameraAndHud(dtSec);
+    renderer.render(scene, camera);
+    return;
+  }
+
   if (state.showSimulation && skierMarker && trackPoints3D.length > 1) {
-    animProgress += 0.0018; // Continuous downhill progression from Start (Kreuzjoch) to Finish
+    // Use real physics telemetry time even in overview simulation so the marker moves faster on steep pitches!
+    animProgress += (dtSec / Math.max(30, trackTelemetry.totalTimeSec)) * 3.0;
     if (animProgress > 1.0) animProgress = 0;
 
-    const totalPts = trackPoints3D.length - 1;
-    const exactIndex = animProgress * totalPts;
-    const idx0 = Math.floor(exactIndex);
-    const idx1 = Math.min(totalPts, idx0 + 1);
-    const ratio = exactIndex - idx0;
+    const targetSec = animProgress * trackTelemetry.totalTimeSec;
+    const times = trackTelemetry.cumTimeSec;
+    let lo = 0, hi = times.length - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (times[mid] <= targetSec) lo = mid;
+      else hi = mid;
+    }
+    const segDur = Math.max(0.0001, times[hi] - times[lo]);
+    const ratio = THREE.MathUtils.clamp((targetSec - times[lo]) / segDur, 0, 1);
 
-    skierMarker.position.lerpVectors(trackPoints3D[idx0], trackPoints3D[idx1], ratio);
+    skierMarker.position.lerpVectors(trackPoints3D[lo], trackPoints3D[hi], ratio);
   }
 
   controls.update();

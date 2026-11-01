@@ -431,25 +431,270 @@ body {
   color: var(--text-muted);
 }
 
-/* Elevation Profile HUD */
+/* Elevation Profile HUD (Foldable & Expandable) */
 .elevation-hud {
   position: absolute;
   bottom: 20px;
   left: 380px;
   right: 20px;
-  height: 135px;
+  height: 185px;
   border-radius: var(--panel-radius);
   padding: 12px 18px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  z-index: 10;
+  gap: 8px;
+  z-index: 15;
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s ease;
+}
+
+.elevation-hud.expanded {
+  height: 360px;
+  z-index: 30;
+}
+
+.elevation-hud.folded {
+  height: 48px;
+  overflow: hidden;
+}
+
+.elevation-hud.folded .profile-canvas-wrapper {
+  display: none;
 }
 
 .hud-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-action-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.hud-action-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--accent-blue);
+}
+
+.cam-btn.pov-launch-btn {
+  grid-column: span 2;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(239, 68, 68, 0.28));
+  border-color: rgba(245, 158, 11, 0.65);
+  color: #fff;
+  font-weight: 700;
+  justify-content: center;
+  padding: 9px 12px;
+}
+
+.cam-btn.pov-launch-btn:hover,
+.cam-btn.pov-launch-btn.active {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border-color: #fff;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+}
+
+/* Live First-Person POV Telemetry HUD */
+.pov-hud {
+  position: absolute;
+  top: 96px;
+  right: 20px;
+  width: 390px;
+  border-radius: var(--panel-radius);
+  padding: 14px 16px;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 25;
+  animation: fadeIn 0.25s ease;
+}
+
+.pov-hud.active {
+  display: flex;
+}
+
+.pov-hud-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pov-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.22);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+}
+
+.pov-section-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pov-metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pov-metric-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pov-metric-box.speed {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.pov-m-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.pov-m-val {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pov-metric-box.speed .pov-m-val {
+  color: #fbbf24;
+  font-size: 1.45rem;
+}
+
+.pov-m-val small {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.pov-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pov-ctrl-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: var(--transition);
+}
+
+.pov-ctrl-btn:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: var(--accent-blue);
+}
+
+.pov-ctrl-btn.exit {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.pov-speed-mult {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.pov-mult-btn {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pov-mult-btn.active {
+  background: var(--accent-blue);
+  color: #060c18;
+  border-color: var(--accent-blue);
+}
+
+body.mode-80s .pov-hud {
+  border: 2px solid #ffe600;
+  box-shadow: 6px 6px 0px #ff007f;
+}
+
+body.mode-80s .pov-metric-box {
+  background: rgba(14, 4, 32, 0.9);
+  border: 1.5px solid #00f0ff;
+}
+
+body.mode-80s .pov-metric-box.speed {
+  border-color: #ff007f;
+  background: rgba(255, 0, 127, 0.22);
+}
+
+body.mode-80s .pov-metric-box.speed .pov-m-val {
+  color: #ffe600;
+  text-shadow: 2px 2px 0px #ff007f;
+}
+
+body.mode-80s .cam-btn.pov-launch-btn {
+  background: linear-gradient(90deg, #ff007f, #ff5e00);
+  border: 2px solid #ffe600;
+  color: #fff;
+  box-shadow: 3px 3px 0px #00f0ff;
 }
 
 .hud-title {

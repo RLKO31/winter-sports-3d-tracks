@@ -192,8 +192,9 @@
 
     <!-- Camera Presets -->
     <div class="panel-section">
-      <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven</h3>
+      <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven & POV</h3>
       <div class="cam-presets-grid" id="cam-presets-container">
+        <button class="cam-btn pov-launch-btn" data-cam="pov"><i class="fa-solid fa-person-skiing"></i> POV Renn-Abfahrt (Live-Tempo)</button>
         <button class="cam-btn" data-cam="iso"><i class="fa-solid fa-compass"></i> Gesamtübersicht</button>
         <button class="cam-btn" data-cam="start"><i class="fa-solid fa-flag-checkered"></i> Start Kreuzjoch</button>
         <button class="cam-btn" data-cam="key"><i class="fa-solid fa-bolt"></i> Freier Fall (92%)</button>
@@ -211,17 +212,62 @@
     </div>
   </aside>
 
-  <!-- Bottom Interactive Elevation Profile HUD -->
-  <div class="elevation-hud glass-panel">
+  <!-- Live First-Person POV Telemetry HUD -->
+  <div id="pov-telemetry-hud" class="pov-hud glass-panel">
+    <div class="pov-hud-top">
+      <span class="pov-live-badge"><i class="fa-solid fa-circle-dot"></i> POV HELMKAMERA LIVE</span>
+      <span id="pov-section-name" class="pov-section-label">Start Kreuzjoch</span>
+      <button id="btn-pov-exit" class="pov-ctrl-btn exit" title="POV-Modus beenden"><i class="fa-solid fa-xmark"></i> Beenden</button>
+    </div>
+    <div class="pov-metrics-row">
+      <div class="pov-metric-box speed">
+        <span class="pov-m-label">TEMPO</span>
+        <span id="pov-speed-val" class="pov-m-val">0 <small>km/h</small></span>
+      </div>
+      <div class="pov-metric-box time">
+        <span class="pov-m-label">RENNZEIT (ZIEL ~1:49.5)</span>
+        <span id="pov-time-val" class="pov-m-val">00:00.0</span>
+      </div>
+      <div class="pov-metric-box slope">
+        <span class="pov-m-label">GEFÄLLE</span>
+        <span id="pov-grad-val" class="pov-m-val">0 %</span>
+      </div>
+      <div class="pov-metric-box elev">
+        <span class="pov-m-label">HÖHE / DISTANZ</span>
+        <span id="pov-elev-val" class="pov-m-val">1692 m | 0 m</span>
+      </div>
+    </div>
+    <div class="pov-controls-row">
+      <button id="btn-pov-pause" class="pov-ctrl-btn"><i class="fa-solid fa-pause"></i> Pause</button>
+      <button id="btn-pov-restart" class="pov-ctrl-btn"><i class="fa-solid fa-rotate-left"></i> Neustart am Starthaus</button>
+      <div class="pov-speed-mult">
+        <span>Zeitlupe / Speed:</span>
+        <button class="pov-mult-btn active" data-mult="1">1x (Echtzeit)</button>
+        <button class="pov-mult-btn" data-mult="2">2x</button>
+        <button class="pov-mult-btn" data-mult="4">4x</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Interactive & Foldable Elevation Profile HUD -->
+  <div id="elevation-hud-panel" class="elevation-hud glass-panel">
     <div class="hud-header">
       <div class="hud-title">
         <i class="fa-solid fa-chart-area"></i>
-        <span id="hud-main-label">Höhenprofil entlang der Strecke (Klicken zum Kameraflug)</span>
+        <span id="hud-main-label">Höhenprofil & Geschwindigkeitskurve (Start → Ziel)</span>
       </div>
-      <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil oder klicke auf einen Abschnitt</div>
+      <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil oder klicke für 3D-Zoom / POV-Einstieg</div>
+      <div class="hud-actions">
+        <button id="btn-hud-expand" class="hud-action-btn" title="Höhenprofil groß aufklappen / verkleinern">
+          <i class="fa-solid fa-up-right-and-down-left-from-center"></i> <span>Großansicht</span>
+        </button>
+        <button id="btn-hud-fold" class="hud-action-btn" title="Höhenprofil ein-/ausklappen">
+          <i class="fa-solid fa-chevron-down"></i> <span>Einklappen</span>
+        </button>
+      </div>
     </div>
     <div class="profile-canvas-wrapper">
-      <canvas id="elevation-canvas"></canvas>
+      <canvas id="elevation-canvas" viewBox="0 0 900 220"></canvas>
     </div>
   </div>
 
