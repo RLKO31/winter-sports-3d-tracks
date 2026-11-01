@@ -16,10 +16,28 @@ const state = {
   isLightTheme: false,
   hoverPointIndex: null,
   povActive: false,
+  gameActive: false,
   povPaused: false,
   povSpeedMult: 1,
   hudExpanded: false,
   hudFolded: false
+};
+
+// Interactive Player Ski Game State & Controls
+const gameState = {
+  sDist: 0,           // Distance along the race course (m)
+  latOffset: 0,       // Lateral offset from centerline in meters (-9m left to +9m right)
+  speedMs: 4.5,       // Current forward speed (m/s)
+  latVel: 0,          // Lateral carving velocity (m/s)
+  steerAngle: 0,      // Current carving lean angle (-1..+1)
+  elapsedSec: 0,      // Player stopwatch time (s)
+  finished: false,
+  keys: {
+    left: false,
+    right: false,
+    tuck: false,
+    brake: false
+  }
 };
 
 // Physics-calculated telemetry arrays for the active track
@@ -736,19 +754,151 @@ function buildDetailedTrackRibbon() {
     trackGroup.add(new THREE.LineLoop(penGeo, penMat));
   }
 
-  // Skier / Runner Marker
-  const sphereGeo = new THREE.SphereGeometry(is80s ? 2.1 : 1.7, 16, 16);
-  const sphereMat = new THREE.MeshStandardMaterial({
-    color: is80s ? 0xffe600 : 0x38bdf8,
-    emissive: is80s ? 0xff007f : 0x38bdf8,
-    emissiveIntensity: 1.4,
-    roughness: 0.1
-  });
-  skierMarker = new THREE.Mesh(sphereGeo, sphereMat);
-  skierMarker.visible = state.showSimulation;
+  // Articulated 3D Ski Racer Character (Proportional to the mountain & piste width!)
+  skierMarker = createSkierCharacter3D(is80s);
+  skierMarker.visible = state.showSimulation || state.gameActive;
   trackGroup.add(skierMarker);
 
+  // Add Slalom / Downhill Race Gates along the track for the player to carve through
+  buildRaceGates(is80s);
+
   trackGroup.visible = state.showTrackRibbon;
+}
+
+// --- BUILD PROPORTIONAL 3D SKI RACER CHARACTER MESH ---
+function createSkierCharacter3D(is80s) {
+  const racer = new THREE.Group();
+  // Scaled so the racer is ~2.2m tall in world units (~0.18 scene units, with 2.2x visibility scale = 0.40 units,
+  // fitting realistically inside the 1.45-unit / 18m wide piste!)
+  const s = 0.42;
+
+  const suitColor = is80s ? 0xff007f : 0xef4444;
+  const accentColor = is80s ? 0x00f0ff : 0x38bdf8;
+  const helmetColor = is80s ? 0xffe600 : 0xffffff;
+  const skiColor = is80s ? 0xffe600 : 0xf59e0b;
+
+  const suitMat = new THREE.MeshStandardMaterial({
+    color: suitColor,
+    emissive: suitColor,
+    emissiveIntensity: is80s ? 0.45 : 0.2,
+    roughness: 0.3
+  });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: accentColor,
+    emissive: accentColor,
+    emissiveIntensity: 0.35,
+    roughness: 0.3
+  });
+  const skiMat = new THREE.MeshStandardMaterial({
+    color: skiColor,
+    emissive: skiColor,
+    emissiveIntensity: 0.5,
+    metalness: 0.6,
+    roughness: 0.2
+  });
+  const helmetMat = new THREE.MeshStandardMaterial({
+    color: helmetColor,
+    emissive: helmetColor,
+    emissiveIntensity: 0.4,
+    roughness: 0.15
+  });
+
+  // Left & Right Skis (oriented along -Z / forward direction of local group)
+  const skiGeo = new THREE.BoxGeometry(0.18 * s, 0.05 * s, 2.2 * s);
+  const leftSki = new THREE.Mesh(skiGeo, skiMat);
+  leftSki.position.set(-0.26 * s, 0.03 * s, 0);
+  const rightSki = new THREE.Mesh(skiGeo, skiMat);
+  rightSki.position.set(0.26 * s, 0.03 * s, 0);
+  racer.add(leftSki, rightSki);
+
+  // Lower Legs / Boots
+  const legGeo = new THREE.CylinderGeometry(0.12 * s, 0.11 * s, 0.75 * s, 8);
+  legGeo.rotateX(0.25);
+  const leftLeg = new THREE.Mesh(legGeo, accentMat);
+  leftLeg.position.set(-0.26 * s, 0.40 * s, 0.1 * s);
+  const rightLeg = new THREE.Mesh(legGeo, accentMat);
+  rightLeg.position.set(0.26 * s, 0.40 * s, 0.1 * s);
+  racer.add(leftLeg, rightLeg);
+
+  // Aerodynamic Tucked Torso (Abfahrtshocke)
+  const torsoGeo = new THREE.CapsuleGeometry(0.28 * s, 0.65 * s, 8, 12);
+  torsoGeo.rotateX(1.05); // Leaned forward in racing tuck
+  const torso = new THREE.Mesh(torsoGeo, suitMat);
+  torso.position.set(0, 0.88 * s, -0.05 * s);
+  torso.name = 'torso';
+  racer.add(torso);
+
+  // Racing Helmet & Goggles
+  const headGeo = new THREE.SphereGeometry(0.26 * s, 14, 14);
+  const head = new THREE.Mesh(headGeo, helmetMat);
+  head.position.set(0, 1.15 * s, -0.45 * s);
+  racer.add(head);
+
+  // Ski Goggles Visor
+  const visorGeo = new THREE.BoxGeometry(0.36 * s, 0.14 * s, 0.20 * s);
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.9, roughness: 0.1 });
+  const visor = new THREE.Mesh(visorGeo, visorMat);
+  visor.position.set(0, 1.15 * s, -0.62 * s);
+  racer.add(visor);
+
+  // Aerodynamic Ski Poles angled back
+  const poleGeo = new THREE.CylinderGeometry(0.025 * s, 0.02 * s, 1.45 * s, 6);
+  poleGeo.rotateX(1.35);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.8 });
+  const leftPole = new THREE.Mesh(poleGeo, poleMat);
+  leftPole.position.set(-0.42 * s, 0.82 * s, 0.35 * s);
+  const rightPole = new THREE.Mesh(poleGeo, poleMat);
+  rightPole.position.set(0.42 * s, 0.82 * s, 0.35 * s);
+  racer.add(leftPole, rightPole);
+
+  // Subtle ground shadow/glow ring right under the skis so the small character is easy to spot from afar
+  const ringGeo = new THREE.RingGeometry(0.45 * s, 0.72 * s, 24);
+  ringGeo.rotateX(-Math.PI / 2);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: is80s ? 0x00f0ff : 0x38bdf8,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.65
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.y = 0.02;
+  racer.add(ring);
+
+  return racer;
+}
+
+// --- BUILD DOWNHILL RACE GATES ALONG THE PISTE ---
+function buildRaceGates(is80s) {
+  if (!trackPoints3D || trackPoints3D.length < 20) return;
+  const step = 28; // Every ~85 meters along the downhill course
+  const gateWidth = state.currentVenue === 'garmisch' ? 1.15 : 0.85;
+
+  for (let i = 20; i < trackPoints3D.length - 15; i += step) {
+    const cur = trackPoints3D[i];
+    const next = trackPoints3D[i + 1];
+    const forward = new THREE.Vector3().subVectors(next, cur).normalize();
+    const side = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+    const isRedGate = ((i / step) | 0) % 2 === 0;
+    const gateColor = is80s
+      ? (isRedGate ? 0xff007f : 0x00f0ff)
+      : (isRedGate ? 0xef4444 : 0x3b82f6);
+
+    const poleGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.55, 6);
+    poleGeo.translate(0, 0.275, 0);
+    const poleMat = new THREE.MeshStandardMaterial({
+      color: gateColor,
+      emissive: gateColor,
+      emissiveIntensity: is80s ? 0.8 : 0.35
+    });
+
+    const leftGate = new THREE.Mesh(poleGeo, poleMat);
+    leftGate.position.copy(cur).addScaledVector(side, -gateWidth * 0.5);
+    const rightGate = new THREE.Mesh(poleGeo, poleMat);
+    rightGate.position.copy(cur).addScaledVector(side, gateWidth * 0.5);
+
+    trackGroup.add(leftGate, rightGate);
+  }
 }
 
 // --- BUILD MILESTONES (STATION FLAGS & 80s SLALOM ARCHES) ---
@@ -797,20 +947,245 @@ function buildMilestones() {
   milestonesGroup.visible = state.showMilestones;
 }
 
-// --- CAMERA PRESET VIEWS & FIRST-PERSON POV MODE ---
+// --- CAMERA PRESET VIEWS, FIRST-PERSON POV & INTERACTIVE 3D SKI GAME ---
 let povElapsedSec = 0;
+
+function orientSkierCharacter(pos3D, forwardVec, leanAngleRad = 0, isTucking = true) {
+  if (!skierMarker) return;
+  skierMarker.position.copy(pos3D);
+  const lookPt = pos3D.clone().add(forwardVec);
+  skierMarker.lookAt(lookPt);
+  skierMarker.rotateZ(leanAngleRad);
+  const torso = skierMarker.getObjectByName('torso');
+  if (torso) {
+    torso.scale.y = isTucking ? 0.85 : 1.08;
+  }
+}
+
+function startSkiGame(startAtIndex = 0) {
+  if (!currentTrackData || !trackTelemetry.cumDistM.length) return;
+  stopPovMode();
+  state.gameActive = true;
+  state.povPaused = false;
+
+  gameState.sDist = trackTelemetry.cumDistM[startAtIndex] || 0;
+  gameState.latOffset = 0;
+  gameState.speedMs = 6.0; // Initial push out of the start gate (~21.6 km/h)
+  gameState.latVel = 0;
+  gameState.steerAngle = 0;
+  gameState.elapsedSec = trackTelemetry.cumTimeSec[startAtIndex] || 0;
+  gameState.finished = false;
+
+  controls.enabled = false;
+  controls.autoRotate = false;
+  if (skierMarker) skierMarker.visible = true;
+
+  const povHud = document.getElementById('pov-telemetry-hud');
+  if (povHud) povHud.classList.add('active');
+
+  const modeBadge = document.getElementById('pov-mode-badge');
+  if (modeBadge) {
+    modeBadge.innerHTML = '<i class="fa-solid fa-gamepad"></i> SKI-SPIEL: SELBER STEUERN (WASD / PFEILE)';
+  }
+
+  const gameCtrlBox = document.getElementById('game-controls-panel');
+  if (gameCtrlBox) gameCtrlBox.classList.add('active');
+
+  const multGroup = document.getElementById('pov-mult-group');
+  if (multGroup) multGroup.style.display = 'none';
+
+  document.querySelectorAll('.cam-btn[data-cam="game"]').forEach(btn => {
+    btn.classList.add('active');
+  });
+
+  updateSkiGamePhysicsAndCamera(0);
+}
+
+function stopSkiGame() {
+  if (!state.gameActive) return;
+  state.gameActive = false;
+  controls.enabled = true;
+  controls.autoRotate = state.autoRotate;
+
+  const povHud = document.getElementById('pov-telemetry-hud');
+  if (povHud) povHud.classList.remove('active');
+
+  const gameCtrlBox = document.getElementById('game-controls-panel');
+  if (gameCtrlBox) gameCtrlBox.classList.remove('active');
+
+  const multGroup = document.getElementById('pov-mult-group');
+  if (multGroup) multGroup.style.display = 'flex';
+
+  document.querySelectorAll('.cam-btn[data-cam="game"]').forEach(btn => {
+    btn.classList.remove('active');
+  });
+}
+
+function updateSkiGamePhysicsAndCamera(dtSec) {
+  if (!state.gameActive || !currentTrackData || trackPoints3D.length < 2) return;
+
+  const dists = trackTelemetry.cumDistM;
+  const totalLen = dists[dists.length - 1] || 3050;
+  const n = dists.length;
+
+  // Find current track segment by distance sDist
+  let lo = 0, hi = n - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (dists[mid] <= gameState.sDist) lo = mid;
+    else hi = mid;
+  }
+
+  const segLen = Math.max(0.1, dists[hi] - dists[lo]);
+  const ratio = THREE.MathUtils.clamp((gameState.sDist - dists[lo]) / segLen, 0, 1);
+
+  const curGradPct = currentTrackData.gradients ? currentTrackData.gradients[lo] : 25;
+  const sinTheta = THREE.MathUtils.clamp(curGradPct / 100, 0.02, 0.75);
+
+  // Compute track horizontal curvature (centrifugal drift in sharp turns like S-Kurve & Olympia-Kurve!)
+  let signedCurvature = 0;
+  if (lo >= 3 && lo < n - 3) {
+    const pPrev = currentTrackData.points[lo - 3];
+    const pCur = currentTrackData.points[lo];
+    const pNext = currentTrackData.points[lo + 3];
+    const v1x = pCur[0] - pPrev[0], v1y = pCur[1] - pPrev[1];
+    const v2x = pNext[0] - pCur[0], v2y = pNext[1] - pCur[1];
+    const cross = v1x * v2y - v1y * v2x;
+    const mag = (Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y)) || 1;
+    signedCurvature = THREE.MathUtils.clamp(cross / mag, -0.8, 0.8);
+  }
+
+  if (!state.povPaused && !gameState.finished && dtSec > 0) {
+    // 1. Player Steering Input (A/D or Left/Right Arrows)
+    let steerInput = 0;
+    if (gameState.keys.left) steerInput -= 1;
+    if (gameState.keys.right) steerInput += 1;
+
+    gameState.steerAngle = THREE.MathUtils.lerp(gameState.steerAngle, steerInput, Math.min(1, dtSec * 8));
+
+    // Lateral carving velocity + centrifugal push outward in high-speed curves
+    const centrifugalPush = signedCurvature * (gameState.speedMs * 0.28);
+    const targetLatVel = steerInput * 14.5 + centrifugalPush;
+    gameState.latVel = THREE.MathUtils.lerp(gameState.latVel, targetLatVel, Math.min(1, dtSec * 6));
+    gameState.latOffset += gameState.latVel * dtSec;
+
+    // Off-piste deep snow penalty if player skis outside the +/- 8.5m groomed race course
+    const maxPisteHalfW = 9.5;
+    let offPisteDrag = 0;
+    if (Math.abs(gameState.latOffset) > 7.0) {
+      offPisteDrag = 4.5; // Deep snow slows the skier down
+    }
+    gameState.latOffset = THREE.MathUtils.clamp(gameState.latOffset, -maxPisteHalfW, maxPisteHalfW);
+
+    // 2. Longitudinal Ski Physics (Gravity vs Air Drag, Carving Edge Friction, Aerodynamic Tuck & Snowplow Brake)
+    const gAccel = 9.81 * sinTheta * 1.35; // Downhill gravity component
+    const aeroCoeff = gameState.keys.tuck ? 0.0042 : 0.0058; // W / Up Arrow = Tight Abfahrtshocke (less air drag!)
+    const aeroDrag = aeroCoeff * gameState.speedMs * gameState.speedMs;
+    const carveFriction = Math.abs(gameState.steerAngle) * 2.8;
+    const brakeDecel = gameState.keys.brake ? 11.5 : 0; // S / Down Arrow = Hard edge brake
+
+    const netAccel = gAccel - aeroDrag - carveFriction - brakeDecel - offPisteDrag;
+    const maxAllowedMs = (gameState.keys.tuck ? 142 : 126) / 3.6;
+    gameState.speedMs = THREE.MathUtils.clamp(gameState.speedMs + netAccel * dtSec, 3.0, maxAllowedMs);
+
+    // Advance along the race course
+    gameState.sDist += gameState.speedMs * dtSec;
+    gameState.elapsedSec += dtSec;
+
+    if (gameState.sDist >= totalLen) {
+      gameState.sDist = totalLen;
+      gameState.finished = true;
+    }
+  }
+
+  // Compute exact 3D world & scene coordinates including player's lateral carving offset
+  const p0 = currentTrackData.points[lo];
+  const p1 = currentTrackData.points[hi];
+  const centerWorldX = THREE.MathUtils.lerp(p0[0], p1[0], ratio);
+  const centerWorldY = THREE.MathUtils.lerp(p0[1], p1[1], ratio);
+
+  const forward3D = new THREE.Vector3().subVectors(trackPoints3D[hi], trackPoints3D[lo]).normalize();
+  const right3D = new THREE.Vector3(-forward3D.z, 0, forward3D.x).normalize();
+
+  // Offset in world meters perpendicular to the track
+  const worldRightX = right3D.x;
+  const worldRightY = -right3D.z;
+  const playerWorldX = centerWorldX + worldRightX * gameState.latOffset;
+  const playerWorldY = centerWorldY + worldRightY * gameState.latOffset;
+
+  const playerPos3D = worldToLocal(playerWorldX, playerWorldY);
+
+  // Heading vector includes subtle yaw from lateral carving velocity
+  const heading3D = forward3D.clone().addScaledVector(right3D, gameState.latVel * 0.025).normalize();
+  orientSkierCharacter(playerPos3D, heading3D, -gameState.steerAngle * 0.48, gameState.keys.tuck);
+
+  // Close Third-Person Chase Camera right behind & slightly above our proportional 3D ski racer!
+  // Since the racer is ~0.42 scene units tall, placing the camera 2.4 units behind and 1.15 units above
+  // makes the mountain look truly colossal while keeping our skier crystal-clear in the lower third of the screen.
+  const chaseCamPos = playerPos3D.clone()
+    .addScaledVector(forward3D, -2.55)
+    .add(new THREE.Vector3(0, 1.18, 0));
+
+  const lookAheadPos = playerPos3D.clone()
+    .addScaledVector(forward3D, 6.5)
+    .add(new THREE.Vector3(0, 0.25, 0));
+
+  camera.position.lerp(chaseCamPos, 0.28);
+  controls.target.lerp(lookAheadPos, 0.32);
+  camera.lookAt(controls.target);
+
+  // Update Telemetry HUD
+  const curSpeedKmh = gameState.speedMs * 3.6;
+  const curElev = sampleTerrainMeshElevation(playerWorldX, playerWorldY);
+
+  let activeMilestone = currentTrackData.milestones[0]?.name || '';
+  for (const m of currentTrackData.milestones) {
+    if (lo >= m.pointIndex) activeMilestone = m.name;
+  }
+  if (gameState.finished) {
+    activeMilestone = `ZIEL ERREICHT! Zeit: ${formatRaceTime(gameState.elapsedSec)}`;
+  }
+
+  const elSpeed = document.getElementById('pov-speed-val');
+  const elTime = document.getElementById('pov-time-val');
+  const elGrad = document.getElementById('pov-grad-val');
+  const elElev = document.getElementById('pov-elev-val');
+  const elSec = document.getElementById('pov-section-name');
+
+  if (elSpeed) elSpeed.innerHTML = `${Math.round(curSpeedKmh)} <small>km/h</small>`;
+  if (elTime) elTime.textContent = formatRaceTime(gameState.elapsedSec);
+  if (elGrad) elGrad.textContent = `${curGradPct} %`;
+  if (elElev) elElev.textContent = `${Math.round(curElev)} m | ${Math.round(gameState.sDist)} m`;
+  if (elSec) elSec.textContent = activeMilestone;
+
+  state.hoverPointIndex = lo;
+  drawElevationProfile();
+}
 
 function startPovMode(startAtIndex = 0) {
   if (!currentTrackData || !trackTelemetry.cumTimeSec.length) return;
+  stopSkiGame();
   state.povActive = true;
   state.povPaused = false;
   povElapsedSec = trackTelemetry.cumTimeSec[startAtIndex] || 0;
 
   controls.enabled = false;
   controls.autoRotate = false;
+  if (skierMarker) skierMarker.visible = true;
 
   const povHud = document.getElementById('pov-telemetry-hud');
   if (povHud) povHud.classList.add('active');
+
+  const modeBadge = document.getElementById('pov-mode-badge');
+  if (modeBadge) {
+    modeBadge.innerHTML = '<i class="fa-solid fa-circle-dot"></i> POV HELMKAMERA LIVE';
+  }
+
+  const gameCtrlBox = document.getElementById('game-controls-panel');
+  if (gameCtrlBox) gameCtrlBox.classList.remove('active');
+
+  const multGroup = document.getElementById('pov-mult-group');
+  if (multGroup) multGroup.style.display = 'flex';
 
   document.querySelectorAll('.cam-btn[data-cam="pov"]').forEach(btn => {
     btn.classList.add('active');
@@ -862,22 +1237,22 @@ function updatePovCameraAndHud(dtSec) {
 
   // Current 3D position on track
   const curPos = new THREE.Vector3().lerpVectors(trackPoints3D[lo], trackPoints3D[hi], ratio);
-  if (skierMarker) {
-    skierMarker.position.copy(curPos);
-  }
+  const segForward = new THREE.Vector3().subVectors(trackPoints3D[hi], trackPoints3D[lo]).normalize();
+  orientSkierCharacter(curPos, segForward, 0, true);
 
   // Look-ahead point (~38 meters ahead along the track for smooth high-speed carving camera)
   const lookAheadIdx = Math.min(n - 1, lo + 12);
   const lookAheadNext = Math.min(n - 1, lookAheadIdx + 1);
   const lookTarget = new THREE.Vector3().lerpVectors(trackPoints3D[lookAheadIdx], trackPoints3D[lookAheadNext], ratio);
 
-  // Position helmet camera slightly above the snow surface (eye height ~1.75m in scaled scene units)
-  const camEye = curPos.clone();
-  camEye.y += 1.45;
+  // Position camera right behind & slightly above our 3D ski racer so you see the racer carving down the mountain!
+  const camEye = curPos.clone()
+    .addScaledVector(segForward, -2.2)
+    .add(new THREE.Vector3(0, 1.15, 0));
   camera.position.lerp(camEye, 0.35);
 
   const smoothLook = lookTarget.clone();
-  smoothLook.y += 0.6;
+  smoothLook.y += 0.3;
   controls.target.lerp(smoothLook, 0.35);
   camera.lookAt(controls.target);
 
@@ -913,6 +1288,11 @@ function updatePovCameraAndHud(dtSec) {
 
 function setCameraPreset(presetKey) {
   if (!currentTrackData) return;
+  if (presetKey === 'game') {
+    if (state.gameActive) stopSkiGame();
+    else startSkiGame(0);
+    return;
+  }
   if (presetKey === 'pov') {
     if (state.povActive) stopPovMode();
     else startPovMode(0);
@@ -920,6 +1300,7 @@ function setCameraPreset(presetKey) {
   }
 
   stopPovMode();
+  stopSkiGame();
   const targetCam = new THREE.Vector3();
   const targetLook = new THREE.Vector3(0, 0, 0);
 
@@ -1301,7 +1682,9 @@ function setupEventListeners() {
 
     elevCanvas.addEventListener('click', () => {
       if (state.hoverPointIndex !== null && trackPoints3D[state.hoverPointIndex]) {
-        if (state.povActive) {
+        if (state.gameActive) {
+          startSkiGame(state.hoverPointIndex);
+        } else if (state.povActive) {
           // Jump POV racer directly to clicked point on the elevation profile!
           povElapsedSec = trackTelemetry.cumTimeSec[state.hoverPointIndex] || 0;
           updatePovCameraAndHud(0);
@@ -1360,6 +1743,7 @@ function setupEventListeners() {
   if (btnPovExit) {
     btnPovExit.addEventListener('click', () => {
       stopPovMode();
+      stopSkiGame();
       setCameraPreset('iso');
     });
   }
@@ -1375,12 +1759,49 @@ function setupEventListeners() {
 
   if (btnPovRestart) {
     btnPovRestart.addEventListener('click', () => {
-      povElapsedSec = 0;
-      state.povPaused = false;
-      if (btnPovPause) btnPovPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
-      updatePovCameraAndHud(0);
+      if (state.gameActive) {
+        startSkiGame(0);
+      } else {
+        povElapsedSec = 0;
+        state.povPaused = false;
+        if (btnPovPause) btnPovPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+        updatePovCameraAndHud(0);
+      }
     });
   }
+
+  // Keyboard & Touch Controls for Interactive Ski Game
+  const handleKey = (e, isDown) => {
+    if (!state.gameActive) return;
+    const code = e.code;
+    if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD', 'ArrowUp', 'KeyW', 'ArrowDown', 'KeyS'].includes(code)) {
+      e.preventDefault();
+    }
+    if (code === 'ArrowLeft' || code === 'KeyA') gameState.keys.left = isDown;
+    if (code === 'ArrowRight' || code === 'KeyD') gameState.keys.right = isDown;
+    if (code === 'ArrowUp' || code === 'KeyW') gameState.keys.tuck = isDown;
+    if (code === 'ArrowDown' || code === 'KeyS') gameState.keys.brake = isDown;
+  };
+  window.addEventListener('keydown', e => handleKey(e, true));
+  window.addEventListener('keyup', e => handleKey(e, false));
+
+  const bindHoldBtn = (id, keyProp) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const setK = val => {
+      gameState.keys[keyProp] = val;
+      el.classList.toggle('pressed', val);
+    };
+    el.addEventListener('mousedown', () => setK(true));
+    el.addEventListener('mouseup', () => setK(false));
+    el.addEventListener('mouseleave', () => setK(false));
+    el.addEventListener('touchstart', e => { e.preventDefault(); setK(true); }, { passive: false });
+    el.addEventListener('touchend', e => { e.preventDefault(); setK(false); }, { passive: false });
+  };
+  bindHoldBtn('btn-touch-left', 'left');
+  bindHoldBtn('btn-touch-right', 'right');
+  bindHoldBtn('btn-touch-tuck', 'tuck');
+  bindHoldBtn('btn-touch-brake', 'brake');
 
   document.querySelectorAll('.pov-mult-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1498,6 +1919,12 @@ function animate() {
   const dtSec = Math.min(0.1, (now - lastFrameTime) / 1000);
   lastFrameTime = now;
 
+  if (state.gameActive) {
+    updateSkiGamePhysicsAndCamera(dtSec);
+    renderer.render(scene, camera);
+    return;
+  }
+
   if (state.povActive) {
     updatePovCameraAndHud(dtSec);
     renderer.render(scene, camera);
@@ -1520,7 +1947,9 @@ function animate() {
     const segDur = Math.max(0.0001, times[hi] - times[lo]);
     const ratio = THREE.MathUtils.clamp((targetSec - times[lo]) / segDur, 0, 1);
 
-    skierMarker.position.lerpVectors(trackPoints3D[lo], trackPoints3D[hi], ratio);
+    const curPos = new THREE.Vector3().lerpVectors(trackPoints3D[lo], trackPoints3D[hi], ratio);
+    const segForward = new THREE.Vector3().subVectors(trackPoints3D[hi], trackPoints3D[lo]).normalize();
+    orientSkierCharacter(curPos, segForward, 0, true);
   }
 
   controls.update();

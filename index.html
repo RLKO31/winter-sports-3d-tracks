@@ -88,9 +88,13 @@
     </div>
 
     <div class="header-actions">
+      <button class="header-game-btn cam-btn" data-cam="game" title="Steuere den Skifahrer selbst die Piste hinunter (WASD / Pfeiltasten)">
+        <i class="fa-solid fa-gamepad"></i>
+        <span>Selber Fahren (Spiel)</span>
+      </button>
       <button class="header-pov-btn cam-btn" data-cam="pov" title="Erste-Person Helmkamera mit Echtzeit-Geschwindigkeit starten">
         <i class="fa-solid fa-person-skiing"></i>
-        <span>POV Renn-Abfahrt (Live)</span>
+        <span>POV Auto-Demo</span>
       </button>
       <button id="btn-theme-toggle" class="icon-btn" title="Light/Dark Mode umschalten">
         <i class="fa-solid fa-circle-half-stroke"></i>
@@ -134,11 +138,17 @@
         </div>
       </div>
 
-      <!-- Prominent Top-of-Sidebar POV Action Button -->
-      <button class="cam-btn pov-hero-btn" data-cam="pov">
-        <i class="fa-solid fa-video"></i>
-        <span id="lbl-pov-hero">POV Helmkamera starten (1:49.4 min)</span>
-      </button>
+      <!-- Prominent Top-of-Sidebar Action Buttons -->
+      <div class="hero-action-stack">
+        <button class="cam-btn game-hero-btn" data-cam="game">
+          <i class="fa-solid fa-gamepad"></i>
+          <span>Ski-Spiel starten (Selber steuern!)</span>
+        </button>
+        <button class="cam-btn pov-hero-btn" data-cam="pov">
+          <i class="fa-solid fa-video"></i>
+          <span id="lbl-pov-hero">POV Helmkamera Auto-Fahrt (1:49.4)</span>
+        </button>
+      </div>
     </div>
 
     <!-- 3D Visualization Modes -->
@@ -202,9 +212,10 @@
 
     <!-- Camera Presets -->
     <div class="panel-section">
-      <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven & POV</h3>
+      <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven & Spiel</h3>
       <div class="cam-presets-grid" id="cam-presets-container">
-        <button class="cam-btn pov-launch-btn" data-cam="pov"><i class="fa-solid fa-person-skiing"></i> POV Renn-Abfahrt (Live-Tempo)</button>
+        <button class="cam-btn game-launch-btn" data-cam="game"><i class="fa-solid fa-gamepad"></i> Selber Fahren (WASD / Pfeile)</button>
+        <button class="cam-btn pov-launch-btn" data-cam="pov"><i class="fa-solid fa-person-skiing"></i> POV Auto-Abfahrt (Live-Tempo)</button>
         <button class="cam-btn" data-cam="iso"><i class="fa-solid fa-compass"></i> Gesamtübersicht</button>
         <button class="cam-btn" data-cam="start"><i class="fa-solid fa-flag-checkered"></i> Start Kreuzjoch</button>
         <button class="cam-btn" data-cam="key"><i class="fa-solid fa-bolt"></i> Freier Fall (92%)</button>
@@ -222,12 +233,12 @@
     </div>
   </aside>
 
-  <!-- Live First-Person POV Telemetry HUD -->
+  <!-- Live First-Person POV & Interactive Ski Game Telemetry HUD -->
   <div id="pov-telemetry-hud" class="pov-hud glass-panel">
     <div class="pov-hud-top">
-      <span class="pov-live-badge"><i class="fa-solid fa-circle-dot"></i> POV HELMKAMERA LIVE</span>
+      <span id="pov-mode-badge" class="pov-live-badge"><i class="fa-solid fa-circle-dot"></i> POV HELMKAMERA LIVE</span>
       <span id="pov-section-name" class="pov-section-label">Start Kreuzjoch</span>
-      <button id="btn-pov-exit" class="pov-ctrl-btn exit" title="POV-Modus beenden"><i class="fa-solid fa-xmark"></i> Beenden</button>
+      <button id="btn-pov-exit" class="pov-ctrl-btn exit" title="Modus beenden"><i class="fa-solid fa-xmark"></i> Beenden</button>
     </div>
     <div class="pov-metrics-row">
       <div class="pov-metric-box speed">
@@ -235,7 +246,7 @@
         <span id="pov-speed-val" class="pov-m-val">0 <small>km/h</small></span>
       </div>
       <div class="pov-metric-box time">
-        <span class="pov-m-label">RENNZEIT (ZIEL ~1:49.5)</span>
+        <span id="pov-time-label" class="pov-m-label">RENNZEIT (ZIEL ~1:49.5)</span>
         <span id="pov-time-val" class="pov-m-val">00:00.0</span>
       </div>
       <div class="pov-metric-box slope">
@@ -247,12 +258,28 @@
         <span id="pov-elev-val" class="pov-m-val">1692 m | 0 m</span>
       </div>
     </div>
-    <div class="pov-controls-row">
+
+    <!-- Interactive Ski Game Controls Hint & Touch Buttons (Shown in Game Mode) -->
+    <div id="game-controls-panel" class="game-controls-box">
+      <div class="game-keys-hint">
+        <span><kbd>W</kbd>/<kbd>↑</kbd> Hocke (Speed)</span>
+        <span><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> Carven</span>
+        <span><kbd>S</kbd>/<kbd>↓</kbd> Bremsen</span>
+      </div>
+      <div class="game-touch-row">
+        <button id="btn-touch-left" class="touch-steer-btn"><i class="fa-solid fa-arrow-left"></i> Links</button>
+        <button id="btn-touch-tuck" class="touch-steer-btn tuck"><i class="fa-solid fa-angles-down"></i> Hocke</button>
+        <button id="btn-touch-brake" class="touch-steer-btn brake"><i class="fa-solid fa-hand"></i> Bremse</button>
+        <button id="btn-touch-right" class="touch-steer-btn">Rechts <i class="fa-solid fa-arrow-right"></i></button>
+      </div>
+    </div>
+
+    <div class="pov-controls-row" id="pov-controls-row">
       <button id="btn-pov-pause" class="pov-ctrl-btn"><i class="fa-solid fa-pause"></i> Pause</button>
       <button id="btn-pov-restart" class="pov-ctrl-btn"><i class="fa-solid fa-rotate-left"></i> Neustart am Starthaus</button>
-      <div class="pov-speed-mult">
-        <span>Zeitlupe / Speed:</span>
-        <button class="pov-mult-btn active" data-mult="1">1x (Echtzeit)</button>
+      <div class="pov-speed-mult" id="pov-mult-group">
+        <span>Speed:</span>
+        <button class="pov-mult-btn active" data-mult="1">1x</button>
         <button class="pov-mult-btn" data-mult="2">2x</button>
         <button class="pov-mult-btn" data-mult="4">4x</button>
       </div>

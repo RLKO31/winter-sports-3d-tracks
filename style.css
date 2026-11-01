@@ -496,6 +496,44 @@ body {
   border-color: var(--accent-blue);
 }
 
+.hero-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.cam-btn.game-launch-btn,
+.cam-btn.game-hero-btn,
+.header-game-btn {
+  grid-column: span 2;
+  background: linear-gradient(135deg, #10b981, #0284c7);
+  border: 1px solid #6ee7b7;
+  color: #fff;
+  font-weight: 800;
+  justify-content: center;
+  padding: 10px 14px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.header-game-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+}
+
+.cam-btn.game-launch-btn:hover,
+.cam-btn.game-launch-btn.active,
+.cam-btn.game-hero-btn:hover,
+.cam-btn.game-hero-btn.active,
+.header-game-btn:hover,
+.header-game-btn.active {
+  background: linear-gradient(135deg, #34d399, #0369a1);
+  border-color: #fff;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.7);
+  transform: translateY(-1px);
+}
+
 .cam-btn.pov-launch-btn,
 .cam-btn.pov-hero-btn {
   grid-column: span 2;
@@ -504,14 +542,83 @@ body {
   color: #fff;
   font-weight: 800;
   justify-content: center;
-  padding: 10px 14px;
+  padding: 9px 14px;
   box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
 }
 
-.cam-btn.pov-hero-btn {
+.cam-btn.pov-hero-btn,
+.cam-btn.game-hero-btn {
   width: 100%;
-  margin-top: 6px;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
+}
+
+.game-controls-box {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.game-controls-box.active {
+  display: flex;
+}
+
+.game-keys-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.game-keys-hint kbd {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #fff;
+}
+
+.game-touch-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.touch-steer-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 4px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.touch-steer-btn:active,
+.touch-steer-btn.pressed {
+  background: var(--accent-blue);
+  color: #060c18;
+  border-color: #fff;
+}
+
+body.mode-80s .cam-btn.game-launch-btn,
+body.mode-80s .cam-btn.game-hero-btn,
+body.mode-80s .header-game-btn {
+  background: linear-gradient(90deg, #00f0ff, #7928ca);
+  border: 2px solid #ffe600;
+  color: #fff;
+  box-shadow: 3px 3px 0px #ff007f;
 }
 
 .header-pov-btn {
