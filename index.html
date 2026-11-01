@@ -8,7 +8,7 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
   
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -29,6 +29,11 @@
   <!-- 3D Canvas Container -->
   <div id="canvas-container"></div>
 
+  <!-- 80s Retro CRT Scanline & Chevron Overlay (Active in Tab 2) -->
+  <div class="retro-overlay-fx" aria-hidden="true">
+    <div class="retro-chevron-ribbon"></div>
+  </div>
+
   <!-- Loading Screen -->
   <div id="loader-overlay">
     <div class="loader-box">
@@ -44,25 +49,42 @@
   <!-- Header Overlay -->
   <header class="app-header glass-panel">
     <div class="brand">
-      <div class="brand-icon">
+      <div class="brand-icon" id="brand-icon-box">
         <i class="fa-solid fa-mountain"></i>
       </div>
       <div>
-        <h1>Winter Sports 3D Tracks</h1>
-        <p class="subtitle">Interaktive 3D-Geländemodelle & Streckenprofile (Saison 2026/27)</p>
+        <h1 id="brand-main-title">Winter Sports 3D Tracks</h1>
+        <p class="subtitle" id="brand-sub-title">Interaktive 3D-Geländemodelle & Streckenprofile (Saison 2026/27)</p>
       </div>
     </div>
 
-    <!-- Venue Switcher Pills -->
-    <div class="venue-switcher">
+    <!-- Top-Level Edition / Tab Switcher (Tab 1: Classic GIS | Tab 2: 80s Retro Ski Fashion) -->
+    <div class="edition-tabs" role="tablist" aria-label="Website Design Tabs">
+      <button class="edition-tab active" data-tab="modern" role="tab" aria-selected="true">
+        <i class="fa-solid fa-cube"></i>
+        <span>Tab 1: Standard 3D GIS</span>
+      </button>
+      <button class="edition-tab retro-tab-btn" data-tab="retro80s" role="tab" aria-selected="false">
+        <i class="fa-solid fa-bolt"></i>
+        <span>Tab 2: 80s Ski Fashion (Garmisch)</span>
+      </button>
+    </div>
+
+    <!-- Venue Switcher Pills (Tab 1) / Retro Badge Banner (Tab 2) -->
+    <div class="venue-switcher" id="venue-switcher-bar">
       <button class="venue-btn active" data-venue="garmisch">
         <span class="badge alpine">Ski Alpin</span>
         <span class="venue-name">Garmisch (Kandahar)</span>
       </button>
-      <button class="venue-btn" data-venue="ruhpolding">
+      <button class="venue-btn" data-venue="ruhpolding" id="btn-venue-ruhpolding">
         <span class="badge biathlon">Biathlon</span>
         <span class="venue-name">Ruhpolding (Chiemgau Arena)</span>
       </button>
+    </div>
+
+    <div class="retro-header-badge" id="retro-header-badge">
+      <span class="retro-stripe-pill">GARMISCH '86</span>
+      <span class="retro-sub-tag">NEON DOWNHILL EDITION</span>
     </div>
 
     <div class="header-actions">
@@ -80,7 +102,10 @@
     <!-- Active Venue & Track Card -->
     <div class="panel-section">
       <div class="track-header">
-        <span id="track-sport-badge" class="badge alpine">Ski Alpin</span>
+        <div class="track-badge-row">
+          <span id="track-sport-badge" class="badge alpine">Ski Alpin</span>
+          <span class="retro-only-tag">FIS WORLD CUP CLASSICS</span>
+        </div>
         <h2 id="track-title">Kandahar (Herren-Abfahrt)</h2>
         <p id="track-venue-location" class="venue-sub">Garmisch-Partenkirchen, Deutschland</p>
       </div>
@@ -89,15 +114,15 @@
       <div class="stats-grid">
         <div class="stat-card">
           <span class="stat-label">Länge</span>
-          <span id="stat-length" class="stat-val">3.330 m</span>
+          <span id="stat-length" class="stat-val">3.050 m</span>
         </div>
         <div class="stat-card">
           <span class="stat-label">Höhendifferenz</span>
-          <span id="stat-drop" class="stat-val">920 m</span>
+          <span id="stat-drop" class="stat-val">949 m</span>
         </div>
         <div class="stat-card">
           <span class="stat-label">Start / Ziel</span>
-          <span id="stat-elev" class="stat-val">1.690 / 770 m</span>
+          <span id="stat-elev" class="stat-val">1.692 / 743 m</span>
         </div>
         <div class="stat-card highlight">
           <span id="stat-special-label" class="stat-label">Max. Gefälle</span>
@@ -108,9 +133,10 @@
 
     <!-- 3D Visualization Modes -->
     <div class="panel-section">
-      <h3 class="panel-title"><i class="fa-solid fa-layer-group"></i> 3D-Darstellung</h3>
+      <h3 class="panel-title"><i class="fa-solid fa-layer-group"></i> <span id="lbl-vis-mode">3D-Darstellung</span></h3>
       
-      <div class="style-selector">
+      <!-- Modern Style Selector (Tab 1) -->
+      <div class="style-selector" id="modern-style-selector">
         <button class="style-btn active" data-style="winter">
           <i class="fa-solid fa-snowflake"></i> Schnee & Relief
         </button>
@@ -119,6 +145,19 @@
         </button>
         <button class="style-btn" data-style="clay">
           <i class="fa-solid fa-cube"></i> Studio Clay
+        </button>
+      </div>
+
+      <!-- 80s Retro Fashion Style Selector (Tab 2) -->
+      <div class="style-selector retro-style-selector" id="retro-style-selector">
+        <button class="retro-style-btn active" data-retrostyle="bogner">
+          <i class="fa-solid fa-fire-flame-curved"></i> Colorblock '86
+        </button>
+        <button class="retro-style-btn" data-retrostyle="synth">
+          <i class="fa-solid fa-sun"></i> Miami Alpine
+        </button>
+        <button class="retro-style-btn" data-retrostyle="ice">
+          <i class="fa-solid fa-bolt"></i> Electric Glacier
         </button>
       </div>
 
@@ -131,7 +170,7 @@
         <label class="toggle-control">
           <input type="checkbox" id="toggle-milestones" checked>
           <span class="toggle-track"></span>
-          <span class="toggle-label"><i class="fa-solid fa-flag"></i> Schlüsselstellen & Marken</span>
+          <span class="toggle-label"><i class="fa-solid fa-flag"></i> Schlüsselstellen & Tore</span>
         </label>
         <label class="toggle-control">
           <input type="checkbox" id="toggle-pulse" checked>
@@ -141,7 +180,7 @@
         <label class="toggle-control">
           <input type="checkbox" id="toggle-wireframe">
           <span class="toggle-track"></span>
-          <span class="toggle-label"><i class="fa-solid fa-draw-polygon"></i> 3D-Drahtgitter (TIN)</span>
+          <span class="toggle-label"><i class="fa-solid fa-draw-polygon"></i> 3D-Drahtgitter / Neon-Grid</span>
         </label>
         <label class="toggle-control">
           <input type="checkbox" id="toggle-rotate">
@@ -155,13 +194,17 @@
     <div class="panel-section">
       <h3 class="panel-title"><i class="fa-solid fa-video"></i> Kameraperspektiven</h3>
       <div class="cam-presets-grid" id="cam-presets-container">
-        <!-- Dynamically injected based on selected track -->
+        <button class="cam-btn" data-cam="iso"><i class="fa-solid fa-compass"></i> Gesamtübersicht</button>
+        <button class="cam-btn" data-cam="start"><i class="fa-solid fa-flag-checkered"></i> Start Kreuzjoch</button>
+        <button class="cam-btn" data-cam="key"><i class="fa-solid fa-bolt"></i> Freier Fall (92%)</button>
+        <button class="cam-btn" data-cam="finish"><i class="fa-solid fa-trophy"></i> Zielarena</button>
+        <button class="cam-btn" data-cam="top"><i class="fa-solid fa-satellite"></i> Top-Down Karte</button>
       </div>
     </div>
 
     <!-- Key Sections / Milestones list -->
     <div class="panel-section">
-      <h3 class="panel-title"><i class="fa-solid fa-map-pin"></i> Schlüsselpassagen</h3>
+      <h3 class="panel-title"><i class="fa-solid fa-map-pin"></i> Schlüsselpassagen (Start → Ziel)</h3>
       <div id="milestones-list" class="milestones-container">
         <!-- Populated via JavaScript -->
       </div>
@@ -173,9 +216,9 @@
     <div class="hud-header">
       <div class="hud-title">
         <i class="fa-solid fa-chart-area"></i>
-        <span>Höhenprofil entlang der Strecke</span>
+        <span id="hud-main-label">Höhenprofil entlang der Strecke (Klicken zum Kameraflug)</span>
       </div>
-      <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil für Streckendetails</div>
+      <div class="hud-info" id="hud-hover-info">Bewege die Maus über das Profil oder klicke auf einen Abschnitt</div>
     </div>
     <div class="profile-canvas-wrapper">
       <canvas id="elevation-canvas"></canvas>

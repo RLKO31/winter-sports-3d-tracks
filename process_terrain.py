@@ -51,13 +51,13 @@ print('--- Processing Garmisch Kandahar DGM1 ---')
 gap_files = glob.glob(os.path.join(base_dir, 'data', 'dgm_garmisch', '*.tif'))
 vrt_gap = gdal.BuildVRT('', gap_files)
 
-minX_g = 654400
-maxX_g = 656800  # 2400m wide
+minX_g = 654300
+maxX_g = 657000  # 2700m wide (covers S-Kurve at X=656874 with 126m buffer!)
 minY_g = 5257100
 maxY_g = 5260300  # 3200m high
 
-nx_g = 150
-ny_g = 200
+nx_g = 180
+ny_g = 220
 ds_gap = gdal.Warp('', vrt_gap, format='MEM',
                    outputBounds=[minX_g, minY_g, maxX_g, maxY_g],
                    width=nx_g, height=ny_g,

@@ -676,3 +676,337 @@ body {
     gap: 10px;
   }
 }
+
+
+/* =========================================================================
+   TOP-LEVEL EDITION TABS & 1980s SKI FASHION EDITION (TAB 2)
+   ========================================================================= */
+
+.edition-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.edition-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: var(--transition);
+}
+
+.edition-tab:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.edition-tab.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #fff;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+.edition-tab.retro-tab-btn {
+  background: linear-gradient(135deg, rgba(255, 0, 127, 0.18), rgba(0, 240, 255, 0.18));
+  border: 1px solid rgba(255, 0, 127, 0.45);
+  color: #ffd6eb;
+}
+
+.edition-tab.retro-tab-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 0, 127, 0.35), rgba(0, 240, 255, 0.35));
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.edition-tab.retro-tab-btn.active {
+  background: linear-gradient(90deg, #ff007f 0%, #ff5e00 50%, #00f0ff 100%);
+  color: #0b031d;
+  font-weight: 800;
+  border-color: #ffe600;
+  box-shadow: 0 0 18px rgba(255, 0, 127, 0.65), 0 0 28px rgba(0, 240, 255, 0.4);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Elements hidden by default in Tab 1 */
+.retro-overlay-fx,
+.retro-header-badge,
+.retro-only-tag,
+.retro-style-selector {
+  display: none;
+}
+
+.track-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#elevation-canvas {
+  cursor: crosshair;
+}
+
+/* =========================================================================
+   BODY.MODE-80S — 1980s RETRO ALPINE SKI FASHION THEME
+   (Neon Magenta #ff007f, Electric Cyan #00f0ff, Sunburst Yellow #ffe600,
+    Radical Violet #240b4c, Bold Offset Shadows & Racing Stripes)
+   ========================================================================= */
+
+body.mode-80s {
+  --bg-base: #14052b;
+  --bg-surface: rgba(26, 9, 54, 0.88);
+  --border-color: #00f0ff;
+  --text-main: #ffffff;
+  --text-muted: #ff9de2;
+  --accent-blue: #00f0ff;
+  --accent-alpine: #ffe600;
+  font-family: 'Chakra Petch', sans-serif;
+}
+
+body.mode-80s .retro-overlay-fx {
+  display: block;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* 80s Diagonal Racing Stripe Ribbon in Top-Right Corner */
+body.mode-80s .retro-chevron-ribbon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 16px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #ff007f 0px,
+    #ff007f 18px,
+    #ffe600 18px,
+    #ffe600 36px,
+    #00f0ff 36px,
+    #00f0ff 54px,
+    #7928ca 54px,
+    #7928ca 72px
+  );
+  box-shadow: 0 0 16px rgba(255, 0, 127, 0.6);
+  z-index: 15;
+}
+
+body.mode-80s #venue-switcher-bar {
+  display: none;
+}
+
+body.mode-80s .retro-header-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #120428;
+  padding: 5px 14px;
+  border: 2px solid #ffe600;
+  box-shadow: 4px 4px 0px #ff007f;
+  transform: skewX(-8deg);
+}
+
+.retro-stripe-pill {
+  background: linear-gradient(90deg, #ff007f, #ff5e00);
+  color: #fff;
+  font-family: 'Righteous', cursive;
+  font-size: 0.85rem;
+  padding: 2px 10px;
+  letter-spacing: 0.08em;
+}
+
+.retro-sub-tag {
+  color: #00f0ff;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+body.mode-80s #modern-style-selector {
+  display: none;
+}
+
+body.mode-80s #retro-style-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+body.mode-80s .glass-panel {
+  background: linear-gradient(160deg, rgba(32, 10, 68, 0.92) 0%, rgba(17, 5, 38, 0.94) 100%);
+  border: 2px solid #00f0ff;
+  border-radius: 6px;
+  box-shadow: 6px 6px 0px #ff007f, 0 0 25px rgba(0, 240, 255, 0.25);
+}
+
+body.mode-80s .app-header {
+  border-bottom: 3px solid #ffe600;
+}
+
+body.mode-80s .brand-icon {
+  background: linear-gradient(135deg, #ff007f 0%, #ffe600 100%);
+  border: 2px solid #00f0ff;
+  border-radius: 4px;
+  color: #120428;
+  box-shadow: 3px 3px 0px #00f0ff;
+  transform: skewX(-6deg);
+}
+
+body.mode-80s .brand h1 {
+  font-family: 'Righteous', cursive;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(90deg, #ffe600, #ff007f, #00f0ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(2px 2px 0px rgba(0, 0, 0, 0.6));
+}
+
+body.mode-80s .retro-only-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #ffe600;
+  background: rgba(255, 0, 127, 0.25);
+  border: 1px solid #ff007f;
+  padding: 2px 6px;
+  letter-spacing: 0.06em;
+}
+
+body.mode-80s .track-header h2 {
+  font-family: 'Righteous', cursive;
+  color: #ffe600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0px #ff007f;
+}
+
+body.mode-80s .stat-card {
+  background: rgba(14, 4, 32, 0.85);
+  border: 1.5px solid #ff007f;
+  border-radius: 4px;
+  box-shadow: 3px 3px 0px rgba(0, 240, 255, 0.6);
+}
+
+body.mode-80s .stat-card.highlight {
+  background: linear-gradient(90deg, rgba(255, 0, 127, 0.3), rgba(255, 94, 0, 0.3));
+  border: 2px solid #ffe600;
+  box-shadow: 3px 3px 0px #ff007f;
+}
+
+body.mode-80s .stat-val {
+  color: #00f0ff;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+body.mode-80s .stat-card.highlight .stat-val {
+  color: #ffe600;
+}
+
+body.mode-80s .panel-title {
+  font-family: 'Righteous', cursive;
+  color: #ffe600;
+  letter-spacing: 0.08em;
+  text-shadow: 1px 1px 0px #ff007f;
+}
+
+.retro-style-btn {
+  background: rgba(14, 4, 32, 0.85);
+  border: 1.5px solid #ff007f;
+  border-radius: 4px;
+  padding: 8px 4px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #ffd6eb;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.retro-style-btn:hover {
+  border-color: #ffe600;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.retro-style-btn.active {
+  background: linear-gradient(135deg, #ff007f, #7928ca);
+  border-color: #00f0ff;
+  color: #ffe600;
+  box-shadow: 3px 3px 0px #00f0ff;
+}
+
+body.mode-80s .toggle-control input:checked + .toggle-track {
+  background: linear-gradient(90deg, #ff007f, #00f0ff);
+}
+
+body.mode-80s .cam-btn {
+  background: rgba(14, 4, 32, 0.85);
+  border: 1.5px solid #00f0ff;
+  border-radius: 4px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 2px 2px 0px #ff007f;
+}
+
+body.mode-80s .cam-btn:hover {
+  background: #ff007f;
+  color: #ffe600;
+  border-color: #ffe600;
+  box-shadow: 3px 3px 0px #00f0ff;
+}
+
+body.mode-80s .milestone-item {
+  background: rgba(14, 4, 32, 0.75);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-left: 4px solid #ff007f;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+body.mode-80s .milestone-item:hover {
+  background: linear-gradient(90deg, rgba(255, 0, 127, 0.35), rgba(0, 240, 255, 0.25));
+  border-left: 4px solid #ffe600;
+  transform: translateX(3px);
+}
+
+body.mode-80s .milestone-elev {
+  color: #ffe600;
+  font-weight: 700;
+}
+
+body.mode-80s .hud-title {
+  font-family: 'Righteous', cursive;
+  color: #ffe600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow: 1px 1px 0px #ff007f;
+}

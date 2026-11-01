@@ -39,41 +39,71 @@ with open(os.path.join(base_dir, 'data', 'gap_osm_ways.json'), 'r', encoding='ut
     gap_osm = json.load(f)
 
 nodes = {e['id']: (e['lat'], e['lon']) for e in gap_osm['elements'] if e['type'] == 'node'}
-ways = {e['id']: [nodes[nid] for nid in e['nodes'] if nid in nodes] for e in gap_osm['elements'] if e['type'] == 'way'}
+ways_nids = {e['id']: [nid for nid in e['nodes'] if nid in nodes] for e in gap_osm['elements'] if e['type'] == 'way'}
 
-# Connecting the official Kandahar race line down from Kreuzjoch to Kreuzeckbahn Talstation
-# Sequence of connected downhill sections from high altitude (1690m) to finish (770m):
-# Section 1: Top Kreuzjoch / Startschuss / Tröglhang entry (Way 799124724 & 256613604)
-# Section 2: Olympia Kurve & Bödele (Way 1472589096, 383068630)
-# Section 3: Freier Fall & Hölle (Way 1472589095, 100995049)
+# Load the processed Garmisch terrain mesh so our track Z coordinates match the 3D mesh surface 100%
+with open(os.path.join(assets_dir, 'garmisch_terrain.json'), 'r', encoding='utf-8') as f:
+    gap_terr = json.load(f)
 
-combined_lat_lons = []
-for wid in [799124724, 256613604, 1472589096, 383068630, 1472589095, 100995049]:
-    pts = ways.get(wid, [])
-    if not pts:
-        continue
-    # Check orientation so track flows strictly downhill (decreasing latitude or altitude)
-    if combined_lat_lons:
-        prev_end = combined_lat_lons[-1]
-        dist_forward = np.hypot(pts[0][0] - prev_end[0], pts[0][1] - prev_end[1])
-        dist_reverse = np.hypot(pts[-1][0] - prev_end[0], pts[-1][1] - prev_end[1])
-        if dist_reverse < dist_forward:
-            pts = list(reversed(pts))
-    combined_lat_lons.extend(pts)
+t_nx = gap_terr['nx']
+t_ny = gap_terr['ny']
+t_minX = gap_terr['originX']
+t_minY = gap_terr['originY']
+t_maxY = t_minY + gap_terr['height']
+t_w = gap_terr['width']
+t_h = gap_terr['height']
+t_dem = np.array(gap_terr['dem'], dtype=float).reshape((t_ny, t_nx))
 
-# Remove consecutive duplicate points
-filtered_coords = []
-for p in combined_lat_lons:
-    if not filtered_coords or np.hypot(p[0] - filtered_coords[-1][0], p[1] - filtered_coords[-1][1]) > 0.00005:
-        filtered_coords.append(p)
+def sample_gap_mesh_z(e, n):
+    u = np.clip((e - t_minX) / t_w * (t_nx - 1), 0.0, t_nx - 1.0001)
+    v = np.clip((t_maxY - n) / t_h * (t_ny - 1), 0.0, t_ny - 1.0001)
+    c0 = int(np.floor(u)); c1 = min(c0 + 1, t_nx - 1)
+    r0 = int(np.floor(v)); r1 = min(r0 + 1, t_ny - 1)
+    du = u - c0
+    dv = v - r0
+    z = ((1 - du) * (1 - dv) * t_dem[r0, c0] +
+         du * (1 - dv) * t_dem[r0, c1] +
+         (1 - du) * dv * t_dem[r1, c0] +
+         du * dv * t_dem[r1, c1])
+    return round(float(z), 2)
 
-print(f"Extracted {len(filtered_coords)} genuine OSM curve points for Kandahar!")
+# Official continuous Men's Kandahar Downhill (Herren-Abfahrt) chain:
+# Way 799124724 (Ref 5: Kreuzjoch Start 1692m -> S-Kurve -> Tröglhang entry 1427m)
+# -> Way 100995049 (Ref 5b: Tröglhang -> Olympia-Kurve -> Bödele -> Seilbahnstadelsprung 1080m)
+# -> Way 1472589095 (Ref 5b: Freier Fall -> Hölle -> FIS-Schneise -> Tauberschuss -> Zielarena 745m)
+chain_nids = []
+for wid in [799124724, 100995049, 1472589095]:
+    for nid in ways_nids[wid]:
+        if not chain_nids or chain_nids[-1] != nid:
+            chain_nids.append(nid)
 
-# Now resample every 3 meters along the curve and query the EXACT 1m DGM1 elevation
-utm_coords = [to_utm(lat, lon) for lat, lon in filtered_coords]
+# Stop at node 9762135265 (Finish line in the Kreuzeck stadium at ~745m before the flat/uphill exit path)
+if 9762135265 in chain_nids:
+    chain_nids = chain_nids[:chain_nids.index(9762135265) + 1]
 
+filtered_coords = [nodes[nid] for nid in chain_nids]
+print(f"Extracted {len(filtered_coords)} continuous OSM curve nodes for Men's Kandahar!")
+
+# Smooth corners gently using Chaikin-style corner cutting on segments > 25m so turns look fluid in 3D
+utm_raw = [to_utm(lat, lon) for lat, lon in filtered_coords]
+utm_coords = [utm_raw[0]]
+for i in range(1, len(utm_raw) - 1):
+    p_prev = utm_raw[i - 1]
+    p_curr = utm_raw[i]
+    p_next = utm_raw[i + 1]
+    d1 = np.hypot(p_curr[0] - p_prev[0], p_curr[1] - p_prev[1])
+    d2 = np.hypot(p_next[0] - p_curr[0], p_next[1] - p_curr[1])
+    if d1 > 20 and d2 > 20:
+        q1 = (0.85 * p_curr[0] + 0.15 * p_prev[0], 0.85 * p_curr[1] + 0.15 * p_prev[1])
+        q2 = (0.85 * p_curr[0] + 0.15 * p_next[0], 0.85 * p_curr[1] + 0.15 * p_next[1])
+        utm_coords.append(q1)
+        utm_coords.append(q2)
+    else:
+        utm_coords.append(p_curr)
+utm_coords.append(utm_raw[-1])
+
+# Now resample every 3 meters along the curve and query the 1m DGM1 / Mesh elevation
 dense_kandahar = []
-distances = [0.0]
 
 for i in range(len(utm_coords) - 1):
     p1 = utm_coords[i]
@@ -85,19 +115,23 @@ for i in range(len(utm_coords) - 1):
         cur_e = p1[0] + frac * (p2[0] - p1[0])
         cur_n = p1[1] + frac * (p2[1] - p1[1])
         cur_z = sample_gap_1m(cur_e, cur_n)
-        if cur_z is not None:
-            dense_kandahar.append([round(cur_e, 2), round(cur_n, 2), cur_z])
+        if cur_z is None:
+            cur_z = sample_gap_mesh_z(cur_e, cur_n)
+        dense_kandahar.append([round(cur_e, 2), round(cur_n, 2), cur_z])
 
 last_e, last_n = utm_coords[-1]
-last_z = sample_gap_1m(last_e, last_n)
-if last_z is not None:
-    dense_kandahar.append([round(last_e, 2), round(last_n, 2), last_z])
+last_z = sample_gap_1m(last_e, last_n) or sample_gap_mesh_z(last_e, last_n)
+dense_kandahar.append([round(last_e, 2), round(last_n, 2), last_z])
 
-print(f"Generated {len(dense_kandahar)} micro-detailed points for Kandahar (3m step)!")
+# Enforce strict monotonic downhill progression (eliminate any micro-bumps from forest canopy/snow cats)
+for i in range(1, len(dense_kandahar)):
+    if dense_kandahar[i][2] > dense_kandahar[i - 1][2]:
+        dense_kandahar[i][2] = dense_kandahar[i - 1][2]
+
+print(f"Generated {len(dense_kandahar)} strictly downhill micro-detailed points for Kandahar (3m step)!")
 
 # Calculate cumulative distance and slope gradients for each point
 total_len = 0.0
-elev_profile = []
 gradients = []
 
 for i in range(len(dense_kandahar)):
@@ -105,25 +139,25 @@ for i in range(len(dense_kandahar)):
     if i > 0:
         prev = dense_kandahar[i - 1]
         dh = np.hypot(pt[0] - prev[0], pt[1] - prev[1])
-        dz = prev[2] - pt[2] # drop
-        grad = (dz / max(0.1, dh)) * 100.0 if dh > 0 else 0.0
+        dz = prev[2] - pt[2] # drop (always >= 0)
+        grad = (dz / max(0.5, dh)) * 100.0 if dh > 0 else 0.0
         total_len += dh
-        gradients.append(round(grad, 1))
+        gradients.append(round(min(92.0, grad), 1))
     else:
         gradients.append(0.0)
 
-# Attach milestone markers along the real track
+# Attach milestone markers at their exact geographic locations along the Kandahar downhill
 milestones = [
-    {"name": "Start Kreuzjoch (1.690 m)", "desc": "Start der Herren-Abfahrt mit steilem Anlauf", "pct": 0.0},
-    {"name": "Startschuss & S-Kurve", "desc": "Extreme Beschleunigung auf über 100 km/h", "pct": 0.12},
-    {"name": "Tröglhang", "desc": "Eisige Steilhangpassage mit anspruchsvollem Außenski-Druck", "pct": 0.28},
-    {"name": "Olympia-Kurve", "desc": "Hochgeschwindigkeitskurve mit enormer Fliehkraft", "pct": 0.42},
-    {"name": "Panorama-Sprung", "desc": "Weitsprung mit direktem Blick auf Garmisch", "pct": 0.54},
-    {"name": "Bödele", "desc": "Gleitabschnitt zur Vorbereitung auf den Steilhang", "pct": 0.65},
-    {"name": "Seilbahnstadelsprung", "desc": "Sprung über die Geländekante", "pct": 0.74},
-    {"name": "Freier Fall (92 %)", "desc": "Steilster Hang im gesamten Ski-Weltcup", "pct": 0.82},
-    {"name": "Hölle", "desc": "Brutale Kompression am Auslauf des Freien Falls", "pct": 0.88},
-    {"name": "Tauberschuss / Zielarena (770 m)", "desc": "Zieleinlauf an der Kreuzeckbahn", "pct": 1.0}
+    {"name": "Start Kreuzjoch (1.690 m)", "desc": "Starthaus der Herren-Abfahrt mit Blick ins Loisachtal", "pct": 0.0},
+    {"name": "Startschuss & S-Kurve", "desc": "Steiler Starthang (53 %) in die enge Rechts-Links-Kombination", "pct": 0.13},
+    {"name": "Tröglhang", "desc": "Eisige Steilhangpassage (über 55 %) mit extremem Außenski-Druck", "pct": 0.21},
+    {"name": "Olympia-Kurve", "desc": "Langgezogene Hochgeschwindigkeitskurve Richtung Westen", "pct": 0.34},
+    {"name": "Panorama-Sprung", "desc": "Weitsprung mit direktem Blick auf Garmisch-Partenkirchen", "pct": 0.46},
+    {"name": "Bödele", "desc": "Kurzes Gleitstück vor der Einfahrt in den Steilhang", "pct": 0.57},
+    {"name": "Seilbahnstadelsprung", "desc": "weiter Satz über die Geländekante vor dem Freien Fall", "pct": 0.67},
+    {"name": "Freier Fall (92 %)", "desc": "Steilster Hang im gesamten Ski-Weltcup mit bis zu 92 % Gefälle", "pct": 0.78},
+    {"name": "Hölle & FIS-Schneise", "desc": "Brutale Kompression und Wald-Schneise mit über 130 km/h", "pct": 0.86},
+    {"name": "Tauberschuss / Zielarena (745 m)", "desc": "Zielschuss und Zielstadion an der Kreuzeckbahn", "pct": 1.0}
 ]
 
 milestone_records = []
@@ -245,7 +279,7 @@ for m in ruhp_milestones:
 
 # High-Res 150m Penalty loop
 pen_cx = 773645.0
-pen_cy = 773095.0
+pen_cy = 5291095.0
 dense_penalty = []
 for deg in range(0, 360, 5):
     rad = np.radians(deg)
